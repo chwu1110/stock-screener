@@ -347,77 +347,7 @@ def get_all_data():
     s6 = list(s6_dict.values())
     s6.sort(key=lambda x: x["第五天"], reverse=True)
 
-    # 策略七：均線糾結（最近一個月內，5/10/20/60/240日均線差距≤3%）
-    # 需要更長的資料來算240日均線，用 close_1yr
-    s7 = []
-    for stock in close_1yr.columns:
-        prices = close_1yr[stock].dropna()
-        if len(prices) < 240:
-            continue
-
-        # 計算各均線
-        ma5   = prices.rolling(5).mean()
-        ma10  = prices.rolling(10).mean()
-        ma20  = prices.rolling(20).mean()
-        ma60  = prices.rolling(60).mean()
-        ma240 = prices.rolling(240).mean()
-
-        # 只看最近一個月的資料
-        ma5_1m   = ma5[ma5.index >= pd.to_datetime(start_1m)]
-        ma10_1m  = ma10[ma10.index >= pd.to_datetime(start_1m)]
-        ma20_1m  = ma20[ma20.index >= pd.to_datetime(start_1m)]
-        ma60_1m  = ma60[ma60.index >= pd.to_datetime(start_1m)]
-        ma240_1m = ma240[ma240.index >= pd.to_datetime(start_1m)]
-
-        if len(ma240_1m.dropna()) == 0:
-            continue
-
-        # 找出最近一個月內任何一天符合均線糾結
-        best_date = None
-        best_spread = 999
-        for date in ma240_1m.dropna().index:
-            v5   = ma5_1m.get(date)
-            v10  = ma10_1m.get(date)
-            v20  = ma20_1m.get(date)
-            v60  = ma60_1m.get(date)
-            v240 = ma240_1m.get(date)
-
-            if any(pd.isna(x) for x in [v5, v10, v20, v60, v240]):
-                continue
-            if any(x <= 0 for x in [v5, v10, v20, v60, v240]):
-                continue
-
-            ma_max = max(v5, v10, v20, v60, v240)
-            ma_min = min(v5, v10, v20, v60, v240)
-            spread = (ma_max - ma_min) / ma_min
-
-            if spread <= 0.03 and spread < best_spread:
-                best_spread = spread
-                best_date = date
-
-        if best_date is not None:
-            current_price = prices.dropna().iloc[-1]
-            v5   = ma5.get(best_date)
-            v10  = ma10.get(best_date)
-            v20  = ma20.get(best_date)
-            v60  = ma60.get(best_date)
-            v240 = ma240.get(best_date)
-            s7.append({
-                "股票代號": stock,
-                "股票名稱": name_dict.get(stock, ""),
-                "糾結日期": str(best_date)[:10],
-                "均線差距": f"{best_spread*100:.2f}%",
-                "目前股價": round(current_price, 2),
-                "MA5":  round(v5, 2),
-                "MA10": round(v10, 2),
-                "MA20": round(v20, 2),
-                "MA60": round(v60, 2),
-                "MA240": round(v240, 2),
-            })
-
-    s7.sort(key=lambda x: float(x["均線差距"].replace("%", "")))
-
-    return s1, s2, s3, s4, s5, s6, s7
+    return s1, s2, s3, s4, s5, s6
 
 # 快取資料
 _cache = {"data": None, "time": None}
@@ -431,13 +361,13 @@ def get_cached_data():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6, s7 = get_cached_data()
+    s1, s2, s3, s4, s5, s6 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6, s7 = get_cached_data()
+    s1, s2, s3, s4, s5, s6 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
@@ -453,8 +383,6 @@ def strategy(sid):
             "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
-        7: {"title": "均線糾結", "icon": "🎯", "desc": "最近一個月內，5/10/20/60/240日均線差距≤3%，差距最小的在前",
-            "stocks": s7, "columns": ["股票代號", "股票名稱", "糾結日期", "均線差距", "目前股價", "MA5", "MA10", "MA20", "MA60", "MA240"]},
     }
 
     if sid not in strategies:
