@@ -358,7 +358,7 @@ def get_all_data():
     s6 = list(s6_dict.values())
     s6.sort(key=lambda x: x["第五天"], reverse=True)
 
-    # 策略七：處置股跌破10日線
+    # 策略七：處置股跌破10日線（每次跌破列一筆）
     s7 = []
     try:
         # 抓取目前處置股清單
@@ -368,7 +368,6 @@ def get_all_data():
 
         disposal_stocks = {}
         if disposal_data.get("stat") == "OK":
-            fields = disposal_data.get("fields", [])
             for row in disposal_data.get("data", []):
                 try:
                     stock_id = row[2].strip()
@@ -378,7 +377,11 @@ def get_all_data():
                 except:
                     continue
 
-        # 計算10日均線，找處置期間內每天跌破的日期
+        def roc_to_date(s):
+            y, m, d = s.split("/")
+            return pd.Timestamp(int(y)+1911, int(m), int(d))
+
+        # 每次跌破都列一筆
         for stock_id, info in disposal_stocks.items():
             try:
                 if stock_id not in close_3m.columns:
@@ -394,53 +397,38 @@ def get_all_data():
                 disposal_start = None
                 disposal_end = None
                 try:
-                    # 格式如 "115/04/17 ~ 115/04/30"
                     parts = period.replace(" ", "").split("~")
                     if len(parts) == 2:
-                        def roc_to_date(s):
-                            y, m, d = s.split("/")
-                            return pd.Timestamp(int(y)+1911, int(m), int(d))
                         disposal_start = roc_to_date(parts[0])
                         disposal_end = roc_to_date(parts[1])
                 except:
                     pass
 
-                # 找處置期間內跌破10日線的每一天
-                broken_dates = []
+                # 找處置期間內每一天跌破10日線的紀錄
                 for date, price in prices.items():
                     ma = ma10.get(date)
                     if pd.isna(ma):
                         continue
-                    # 如果有處置期間，只看期間內
+                    # 只看處置期間內
                     if disposal_start and disposal_end:
                         if not (disposal_start <= date <= disposal_end):
                             continue
                     if price < ma:
                         diff_pct = (price - ma) / ma
-                        broken_dates.append({
-                            "日期": str(date)[:10],
+                        s7.append({
+                            "股票代號": stock_id,
+                            "股票名稱": info["name"],
+                            "處置期間": period,
+                            "跌破日期": str(date)[:10],
                             "收盤價": round(price, 2),
                             "10日均線": round(ma, 2),
-                            "跌破幅度": f"{diff_pct*100:.1f}%"
+                            "跌破幅度": f"{diff_pct*100:.1f}%",
                         })
-
-                if broken_dates:
-                    # 最近一次跌破
-                    latest = broken_dates[-1]
-                    s7.append({
-                        "股票代號": stock_id,
-                        "股票名稱": info["name"],
-                        "處置期間": period,
-                        "跌破次數": f"{len(broken_dates)}次",
-                        "最近跌破日": latest["日期"],
-                        "當日收盤": latest["收盤價"],
-                        "10日均線": latest["10日均線"],
-                        "跌破幅度": latest["跌破幅度"],
-                    })
             except:
                 continue
 
-        s7.sort(key=lambda x: float(x["跌破幅度"].replace("%", "")))
+        # 依股票代號、日期排序
+        s7.sort(key=lambda x: (x["股票代號"], x["跌破日期"]))
 
     except Exception as e:
         print(f"處置股API失敗: {e}")
@@ -482,8 +470,8 @@ def strategy(sid):
             "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
-        7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，且收盤價跌破10日均線，跌破最多的在前",
-            "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "跌破次數", "最近跌破日", "當日收盤", "10日均線", "跌破幅度"]},
+        7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，處置期間內每次收盤價跌破10日均線皆列出，依股票代號與日期排序",
+            "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "跌破日期", "收盤價", "10日均線", "跌破幅度"]},
     }
 
     if sid not in strategies:
