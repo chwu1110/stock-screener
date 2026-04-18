@@ -39,7 +39,7 @@ HOME_TEMPLATE = """
     <div class="grid">
         <a href="/strategy/1" class="card">
             <div class="card-icon">🔥</div>
-            <div class="card-title">連續兩天漲停</div>
+            <div class="card-title">二手紅盤</div>
             <div class="card-desc">最近一個月內，連續兩個交易日漲停的股票</div>
             <div class="card-count">{{ counts[0] }}</div>
             <div class="card-count-label">符合股票數</div>
@@ -63,6 +63,13 @@ HOME_TEMPLATE = """
             <div class="card-title">三手紅盤</div>
             <div class="card-desc">最近一個月內，連續三天漲停 或 連續三天累積漲幅≥25%</div>
             <div class="card-count">{{ counts[3] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
+        <a href="/strategy/5" class="card">
+            <div class="card-icon">🎰</div>
+            <div class="card-title">四手紅盤</div>
+            <div class="card-desc">最近一個月內，連續四天漲停 或 連續四天累積漲幅≥30%</div>
+            <div class="card-count">{{ counts[4] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
     </div>
@@ -170,7 +177,7 @@ def get_all_data():
     close_2026 = close_df[close_df.index >= pd.to_datetime(start_2026)]
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
 
-    # 策略一：連續兩天漲停（最近一個月）
+    # 策略一：二手紅盤（最近一個月）
     daily_return_1m = close_1m.pct_change()
     is_limit_up = daily_return_1m >= 0.095
     consecutive = is_limit_up & is_limit_up.shift(1)
@@ -302,7 +309,63 @@ def get_all_data():
 
     s4.sort(key=lambda x: x["第三天"], reverse=True)
 
-    return s1, s2, s3, s4
+    # 策略五：四手紅盤（最近一個月，連續四天漲停 或 四天漲幅≥30%）
+    s5 = []
+    seen5 = set()
+    for stock in daily_return_1m.columns:
+        series = daily_return_1m[stock].dropna()
+        if len(series) < 4:
+            continue
+
+        # 條件A：連續四天漲停
+        is_lu = series >= 0.095
+        consec4 = is_lu & is_lu.shift(1) & is_lu.shift(2) & is_lu.shift(3)
+        dates_a = series.index[consec4]
+
+        for date in dates_a:
+            key = (stock, str(date)[:10], "A")
+            if key in seen5:
+                continue
+            seen5.add(key)
+            idx = series.index.get_loc(date)
+            d1, d2, d3, d4 = series.index[idx-3], series.index[idx-2], series.index[idx-1], series.index[idx]
+            s5.append({
+                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                "觸發條件": "連續四天漲停",
+                "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10], "第四天": str(d4)[:10],
+                "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                "第四天收盤": round(close_1m[stock].loc[d4], 2),
+                "四日累積漲幅": f"{((1+series.loc[d1])*(1+series.loc[d2])*(1+series.loc[d3])*(1+series.loc[d4])-1)*100:.1f}%",
+            })
+
+        # 條件B：連續四天累積漲幅≥30%
+        rolling_4 = (1 + series).rolling(4).apply(lambda x: x.prod(), raw=True) - 1
+        dates_b = series.index[rolling_4 >= 0.30]
+
+        for date in dates_b:
+            idx = series.index.get_loc(date)
+            if idx < 3:
+                continue
+            d1, d2, d3, d4 = series.index[idx-3], series.index[idx-2], series.index[idx-1], series.index[idx]
+            if is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3] and is_lu.loc[d4]:
+                continue
+            key = (stock, str(date)[:10], "B")
+            if key in seen5:
+                continue
+            seen5.add(key)
+            gain = rolling_4.loc[date]
+            s5.append({
+                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                "觸發條件": "四天漲幅≥30%",
+                "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10], "第四天": str(d4)[:10],
+                "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                "第四天收盤": round(close_1m[stock].loc[d4], 2),
+                "四日累積漲幅": f"{gain*100:.1f}%",
+            })
+
+    s5.sort(key=lambda x: x["第四天"], reverse=True)
+
+    return s1, s2, s3, s4, s5
 
 # 快取資料
 _cache = {"data": None, "time": None}
@@ -316,17 +379,17 @@ def get_cached_data():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4 = get_cached_data()
+    s1, s2, s3, s4, s5 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4 = get_cached_data()
+    s1, s2, s3, s4, s5 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
-        1: {"title": "連續兩天漲停", "icon": "🔥", "desc": "最近一個月內，連續兩個交易日漲停的股票，依日期由新到舊排列",
+        1: {"title": "二手紅盤", "icon": "🔥", "desc": "最近一個月內，連續兩個交易日漲停的股票，依日期由新到舊排列",
             "stocks": s1, "columns": ["股票代號", "股票名稱", "第一天漲停日", "第二天漲停日", "第一天收盤", "第二天收盤"]},
         2: {"title": "跌停翻漲停", "icon": "⚡", "desc": "2026/1/1起，單日開盤跌停、收盤漲停的股票",
             "stocks": s2, "columns": ["股票代號", "股票名稱", "發生日期", "開盤價", "收盤價", "前日收盤"]},
@@ -334,6 +397,8 @@ def strategy(sid):
             "stocks": s3, "columns": ["股票代號", "股票名稱", "5日最大漲幅", "漲幅起始日", "漲幅結束日", "當時最高價", "目前股價", "從高點修正"]},
         4: {"title": "三手紅盤", "icon": "🀄", "desc": "最近一個月內，連續三天漲停 或 連續三天累積漲幅≥25%，依日期由新到舊排列",
             "stocks": s4, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第一天收盤", "第二天收盤", "第三天收盤", "三日累積漲幅"]},
+        5: {"title": "四手紅盤", "icon": "🎰", "desc": "最近一個月內，連續四天漲停 或 連續四天累積漲幅≥30%，依日期由新到舊排列",
+            "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
     }
 
     if sid not in strategies:
