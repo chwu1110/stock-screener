@@ -4,6 +4,8 @@ from finlab import data
 import pandas as pd
 from datetime import datetime, timedelta
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from flask import Flask, render_template_string
 
 app = Flask(__name__)
@@ -353,7 +355,7 @@ def get_all_data():
     try:
         # 抓取目前處置股清單
         disposal_url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
-        disposal_res = requests.get(disposal_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        disposal_res = requests.get(disposal_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
         disposal_data = disposal_res.json()
 
         disposal_stocks = {}
