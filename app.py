@@ -190,6 +190,7 @@ def get_all_data():
     s1.sort(key=lambda x: x["第二天漲停日"], reverse=True)
 
     # 策略二：跌停開→漲停收
+    daily_return_2026 = close_2026.pct_change()
     prev_close = close_2026.shift(1)
     open_change = (open_2026 - prev_close) / prev_close
     reversal = (open_change <= -0.095) & (daily_return_2026 >= 0.095)
