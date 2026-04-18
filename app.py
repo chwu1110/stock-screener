@@ -54,7 +54,7 @@ HOME_TEMPLATE = """
         <a href="/strategy/3" class="card">
             <div class="card-icon">📉</div>
             <div class="card-title">強勢股回檔</div>
-            <div class="card-desc">一年內任意5日漲幅≥30%，且目前從高點修正≥25%</div>
+            <div class="card-desc">最近3個月內任意5日漲幅≥30%，且目前從高點修正≥20%</div>
             <div class="card-count">{{ counts[2] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
@@ -143,6 +143,7 @@ def get_all_data():
     today = datetime.today()
     start_2026 = "2026-01-01"
     start_1yr = (today - timedelta(days=365)).strftime("%Y-%m-%d")
+    start_3m = (today - timedelta(days=90)).strftime("%Y-%m-%d")
     end_date = today.strftime("%Y-%m-%d")
 
     data.date_range = (start_1yr, end_date)
@@ -156,6 +157,7 @@ def get_all_data():
     open_df = pd.DataFrame(open_.values, index=pd.to_datetime(open_.index.astype(str)), columns=open_.columns)
 
     close_1yr = close_df[close_df.index >= pd.to_datetime(start_1yr)]
+    close_3m = close_df[close_df.index >= pd.to_datetime(start_3m)]
     close_2026 = close_df[close_df.index >= pd.to_datetime(start_2026)]
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
 
@@ -198,11 +200,11 @@ def get_all_data():
             })
     s2.sort(key=lambda x: x["發生日期"], reverse=True)
 
-    # 策略三：強勢股回檔
-    daily_return_1yr = close_1yr.pct_change()
+    # 策略三：強勢股回檔（最近3個月內5日漲30%，從高點回檔20%）
+    daily_return_3m = close_3m.pct_change()
     s3 = []
-    for stock in daily_return_1yr.columns:
-        series = daily_return_1yr[stock].dropna()
+    for stock in daily_return_3m.columns:
+        series = daily_return_3m[stock].dropna()
         if len(series) < 5:
             continue
         rolling_5 = (1 + series).rolling(5).apply(lambda x: x.prod(), raw=True) - 1
@@ -211,14 +213,14 @@ def get_all_data():
             continue
         best_end_date = rolling_5.idxmax()
         idx = series.index.get_loc(best_end_date)
-        segment = close_1yr[stock].iloc[max(0, idx-4):idx+1]
+        segment = close_3m[stock].iloc[max(0, idx-4):idx+1]
         actual_gain = (segment.iloc[-1] / segment.iloc[0]) - 1
-        if actual_gain < 0.30 or segment.index[0] < pd.to_datetime(start_1yr):
+        if actual_gain < 0.30 or segment.index[0] < pd.to_datetime(start_3m):
             continue
         peak_price = segment.max()
-        current_price = close_1yr[stock].dropna().iloc[-1]
+        current_price = close_3m[stock].dropna().iloc[-1]
         drawdown = (current_price - peak_price) / peak_price
-        if drawdown <= -0.25:
+        if drawdown <= -0.20:
             s3.append({
                 "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
                 "5日最大漲幅": f"{actual_gain*100:.1f}%",
@@ -258,7 +260,7 @@ def strategy(sid):
             "stocks": s1, "columns": ["股票代號", "股票名稱", "第一天漲停日", "第二天漲停日", "第一天收盤", "第二天收盤"]},
         2: {"title": "跌停翻漲停", "icon": "⚡", "desc": "2026/1/1起，單日開盤跌停、收盤漲停的股票",
             "stocks": s2, "columns": ["股票代號", "股票名稱", "發生日期", "開盤價", "收盤價", "前日收盤"]},
-        3: {"title": "強勢股回檔", "icon": "📉", "desc": "一年內任意5日漲幅≥30%，且目前從高點修正≥25%，修正最多的在前",
+        3: {"title": "強勢股回檔", "icon": "📉", "desc": "最近3個月內任意5日漲幅≥30%，且目前從高點修正≥20%，修正最多的在前",
             "stocks": s3, "columns": ["股票代號", "股票名稱", "5日最大漲幅", "漲幅起始日", "漲幅結束日", "當時最高價", "目前股價", "從高點修正"]},
     }
 
