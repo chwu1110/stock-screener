@@ -40,7 +40,7 @@ HOME_TEMPLATE = """
         <a href="/strategy/1" class="card">
             <div class="card-icon">🔥</div>
             <div class="card-title">連續兩天漲停</div>
-            <div class="card-desc">2026/1/1起，連續兩個交易日漲停的股票</div>
+            <div class="card-desc">最近一個月內，連續兩個交易日漲停的股票</div>
             <div class="card-count">{{ counts[0] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
@@ -170,9 +170,9 @@ def get_all_data():
     close_2026 = close_df[close_df.index >= pd.to_datetime(start_2026)]
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
 
-    # 策略一：連續兩天漲停
-    daily_return_2026 = close_2026.pct_change()
-    is_limit_up = daily_return_2026 >= 0.095
+    # 策略一：連續兩天漲停（最近一個月）
+    daily_return_1m = close_1m.pct_change()
+    is_limit_up = daily_return_1m >= 0.095
     consecutive = is_limit_up & is_limit_up.shift(1)
 
     s1 = []
@@ -184,8 +184,8 @@ def get_all_data():
             s1.append({
                 "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
                 "第一天漲停日": str(prev_date)[:10], "第二天漲停日": str(date)[:10],
-                "第一天收盤": round(close_2026[stock].loc[prev_date], 2),
-                "第二天收盤": round(close_2026[stock].loc[date], 2),
+                "第一天收盤": round(close_1m[stock].loc[prev_date], 2),
+                "第二天收盤": round(close_1m[stock].loc[date], 2),
             })
     s1.sort(key=lambda x: x["第二天漲停日"], reverse=True)
 
@@ -325,7 +325,7 @@ def strategy(sid):
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
-        1: {"title": "連續兩天漲停", "icon": "🔥", "desc": "2026/1/1起，連續兩個交易日漲停的股票，依日期由新到舊排列",
+        1: {"title": "連續兩天漲停", "icon": "🔥", "desc": "最近一個月內，連續兩個交易日漲停的股票，依日期由新到舊排列",
             "stocks": s1, "columns": ["股票代號", "股票名稱", "第一天漲停日", "第二天漲停日", "第一天收盤", "第二天收盤"]},
         2: {"title": "跌停翻漲停", "icon": "⚡", "desc": "2026/1/1起，單日開盤跌停、收盤漲停的股票",
             "stocks": s2, "columns": ["股票代號", "股票名稱", "發生日期", "開盤價", "收盤價", "前日收盤"]},
