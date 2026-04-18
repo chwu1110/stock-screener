@@ -1,0 +1,4 @@
+finlab
+flask
+pandas
+gunicorn
