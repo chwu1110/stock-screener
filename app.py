@@ -61,14 +61,14 @@ HOME_TEMPLATE = """
         <a href="/strategy/4" class="card">
             <div class="card-icon">🀄</div>
             <div class="card-title">三手紅盤</div>
-            <div class="card-desc">最近一個月內，連續三天漲停 或 連續三天累積漲幅≥25%</div>
+            <div class="card-desc">最近一個月內，連續三天漲停 或 連續三天累積漲幅≥30%</div>
             <div class="card-count">{{ counts[3] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
         <a href="/strategy/5" class="card">
             <div class="card-icon">🎰</div>
             <div class="card-title">四手紅盤</div>
-            <div class="card-desc">最近一個月內，連續四天漲停 或 連續四天累積漲幅≥30%</div>
+            <div class="card-desc">最近一個月內，連續四天漲停 或 連續四天累積漲幅≥40%</div>
             <div class="card-count">{{ counts[4] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
@@ -267,13 +267,13 @@ def get_all_data():
         rolling_3 = (1 + series).rolling(3).apply(lambda x: x.prod(), raw=True) - 1
         consec3 = is_lu & is_lu.shift(1) & is_lu.shift(2)
 
-        for date in series.index[rolling_3 >= 0.25]:
+        for date in series.index[rolling_3 >= 0.30]:
             idx = series.index.get_loc(date)
             if idx < 2:
                 continue
             d1, d2, d3 = series.index[idx-2], series.index[idx-1], series.index[idx]
             gain = rolling_3.loc[date]
-            cond = "連續三天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3]) else "三天漲幅≥25%"
+            cond = "連續三天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3]) else "三天漲幅≥30%"
             if stock not in s4_dict or gain > float(s4_dict[stock]["三日累積漲幅"].replace("%","")):
                 s4_dict[stock] = {
                     "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
@@ -297,13 +297,13 @@ def get_all_data():
         is_lu = series >= 0.095
         rolling_4 = (1 + series).rolling(4).apply(lambda x: x.prod(), raw=True) - 1
 
-        for date in series.index[rolling_4 >= 0.30]:
+        for date in series.index[rolling_4 >= 0.40]:
             idx = series.index.get_loc(date)
             if idx < 3:
                 continue
             d1, d2, d3, d4 = series.index[idx-3], series.index[idx-2], series.index[idx-1], series.index[idx]
             gain = rolling_4.loc[date]
-            cond = "連續四天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3] and is_lu.loc[d4]) else "四天漲幅≥30%"
+            cond = "連續四天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3] and is_lu.loc[d4]) else "四天漲幅≥40%"
             if stock not in s5_dict or gain > float(s5_dict[stock]["四日累積漲幅"].replace("%","")):
                 s5_dict[stock] = {
                     "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
@@ -377,9 +377,9 @@ def strategy(sid):
             "stocks": s2, "columns": ["股票代號", "股票名稱", "發生日期", "開盤價", "收盤價", "前日收盤"]},
         3: {"title": "強勢股回檔", "icon": "📉", "desc": "最近3個月內任意5日漲幅≥30%，且目前從高點修正≥20%，修正最多的在前",
             "stocks": s3, "columns": ["股票代號", "股票名稱", "5日最大漲幅", "漲幅起始日", "漲幅結束日", "當時最高價", "目前股價", "從高點修正"]},
-        4: {"title": "三手紅盤", "icon": "🀄", "desc": "最近一個月內，連續三天漲停 或 連續三天累積漲幅≥25%，依日期由新到舊排列",
+        4: {"title": "三手紅盤", "icon": "🀄", "desc": "最近一個月內，連續三天漲停 或 連續三天累積漲幅≥30%，依日期由新到舊排列",
             "stocks": s4, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第一天收盤", "第二天收盤", "第三天收盤", "三日累積漲幅"]},
-        5: {"title": "四手紅盤", "icon": "🎰", "desc": "最近一個月內，連續四天漲停 或 連續四天累積漲幅≥30%，依日期由新到舊排列",
+        5: {"title": "四手紅盤", "icon": "🎰", "desc": "最近一個月內，連續四天漲停 或 連續四天累積漲幅≥40%，依日期由新到舊排列",
             "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
