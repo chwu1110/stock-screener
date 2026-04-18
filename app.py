@@ -81,7 +81,15 @@ HOME_TEMPLATE = """
             <div class="card-desc">最近一個月內，連續五天累積漲幅≥50%</div>
             <div class="card-count">{{ counts[5] }}</div>
             <div class="card-count-label">符合股票數</div>
-        </a>    </div>
+        </a>
+        <a href="/strategy/7" class="card">
+            <div class="card-icon">⚠️</div>
+            <div class="card-title">處置股跌破10日線</div>
+            <div class="card-desc">目前正在被處置的股票，且收盤價跌破10日均線</div>
+            <div class="card-count">{{ counts[6] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
+    </div>
 
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
 </body>
