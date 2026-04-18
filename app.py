@@ -82,7 +82,7 @@ HOME_TEMPLATE = """
         <a href="/strategy/7" class="card">
             <div class="card-icon">🚀</div>
             <div class="card-title">興櫃飆股</div>
-            <div class="card-desc">最近一個月內，興櫃股票3天內收盤漲幅≥30%</div>
+            <div class="card-desc">即時資料，今日價格比昨日均價高≥30%且成交量>500</div>
             <div class="card-count">{{ counts[6] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
@@ -183,10 +183,8 @@ def get_all_data():
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
     # 興櫃股票清單（市場別包含"興櫃"）
-    # 興櫃股票代號補零對齊收盤價欄位格式
+    # 興櫃行業別對照
     emerging_raw = stock_info[stock_info["市場別"] == "rotc"]["stock_id"].tolist()
-    emerging_stocks = set(emerging_raw)  # 原始格式
-    emerging_stocks_padded = set(s.zfill(4) for s in emerging_raw)  # 補零格式
 
     close_df = pd.DataFrame(close.values, index=pd.to_datetime(close.index.astype(str)), columns=close.columns)
     open_df = pd.DataFrame(open_.values, index=pd.to_datetime(open_.index.astype(str)), columns=open_.columns)
@@ -430,7 +428,7 @@ def strategy(sid):
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: {"title": "興櫃飆股", "icon": "🚀", "desc": "最近一個月內，興櫃股票任意3天內，第3天收盤比第1天收盤高≥30%",
-            "stocks": s7, "columns": ["股票代號", "股票名稱", "行業別", "起始日", "中間日", "結束日", "起始收盤", "結束收盤", "漲幅"]},
+            "stocks": s7, "columns": ["股票代號", "股票名稱", "行業別", "昨日均價", "今日最新價", "成交量", "漲幅"]},
     }
 
     if sid not in strategies:
