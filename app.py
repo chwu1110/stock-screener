@@ -256,125 +256,69 @@ def get_all_data():
             })
     s3.sort(key=lambda x: float(x["從高點修正"].replace("%", "")))
 
-    # 策略四：三手紅盤（最近一個月，連續三天漲停 或 連續三天漲幅≥25%）
+    # 策略四：三手紅盤（最近一個月，連續三天漲停 或 三天漲幅≥25%，每股只出現一次）
     daily_return_1m = close_1m.pct_change()
-    s4 = []
-    seen = set()
+    s4_dict = {}
     for stock in daily_return_1m.columns:
         series = daily_return_1m[stock].dropna()
         if len(series) < 3:
             continue
-
-        # 條件A：連續三天漲停
         is_lu = series >= 0.095
-        consec3 = is_lu & is_lu.shift(1) & is_lu.shift(2)
-        dates_a = series.index[consec3]
-
-        for date in dates_a:
-            key = (stock, str(date)[:10], "A")
-            if key in seen:
-                continue
-            seen.add(key)
-            idx = series.index.get_loc(date)
-            d1, d2, d3 = series.index[idx-2], series.index[idx-1], series.index[idx]
-            s4.append({
-                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
-                "觸發條件": "連續三天漲停",
-                "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10],
-                "第一天收盤": round(close_1m[stock].loc[d1], 2),
-                "第二天收盤": round(close_1m[stock].loc[d2], 2),
-                "第三天收盤": round(close_1m[stock].loc[d3], 2),
-                "三日累積漲幅": f"{((1+series.loc[d1])*(1+series.loc[d2])*(1+series.loc[d3])-1)*100:.1f}%",
-            })
-
-        # 條件B：連續三天累積漲幅≥25%
         rolling_3 = (1 + series).rolling(3).apply(lambda x: x.prod(), raw=True) - 1
-        dates_b = series.index[rolling_3 >= 0.25]
+        consec3 = is_lu & is_lu.shift(1) & is_lu.shift(2)
 
-        for date in dates_b:
+        for date in series.index[rolling_3 >= 0.25]:
             idx = series.index.get_loc(date)
             if idx < 2:
                 continue
             d1, d2, d3 = series.index[idx-2], series.index[idx-1], series.index[idx]
-            # 避免跟條件A重複
-            if is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3]:
-                continue
-            key = (stock, str(date)[:10], "B")
-            if key in seen:
-                continue
-            seen.add(key)
             gain = rolling_3.loc[date]
-            s4.append({
-                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
-                "觸發條件": "三天漲幅≥25%",
-                "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10],
-                "第一天收盤": round(close_1m[stock].loc[d1], 2),
-                "第二天收盤": round(close_1m[stock].loc[d2], 2),
-                "第三天收盤": round(close_1m[stock].loc[d3], 2),
-                "三日累積漲幅": f"{gain*100:.1f}%",
-            })
+            cond = "連續三天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3]) else "三天漲幅≥25%"
+            if stock not in s4_dict or gain > float(s4_dict[stock]["三日累積漲幅"].replace("%","")):
+                s4_dict[stock] = {
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "觸發條件": cond,
+                    "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10],
+                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                    "第二天收盤": round(close_1m[stock].loc[d2], 2),
+                    "第三天收盤": round(close_1m[stock].loc[d3], 2),
+                    "三日累積漲幅": f"{gain*100:.1f}%",
+                }
 
+    s4 = list(s4_dict.values())
     s4.sort(key=lambda x: x["第三天"], reverse=True)
 
-    # 策略五：四手紅盤（最近一個月，連續四天漲停 或 四天漲幅≥30%）
-    s5 = []
-    seen5 = set()
+    # 策略五：四手紅盤（最近一個月，連續四天漲停 或 四天漲幅≥30%，每股只出現一次）
+    s5_dict = {}
     for stock in daily_return_1m.columns:
         series = daily_return_1m[stock].dropna()
         if len(series) < 4:
             continue
-
-        # 條件A：連續四天漲停
         is_lu = series >= 0.095
-        consec4 = is_lu & is_lu.shift(1) & is_lu.shift(2) & is_lu.shift(3)
-        dates_a = series.index[consec4]
-
-        for date in dates_a:
-            key = (stock, str(date)[:10], "A")
-            if key in seen5:
-                continue
-            seen5.add(key)
-            idx = series.index.get_loc(date)
-            d1, d2, d3, d4 = series.index[idx-3], series.index[idx-2], series.index[idx-1], series.index[idx]
-            s5.append({
-                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
-                "觸發條件": "連續四天漲停",
-                "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10], "第四天": str(d4)[:10],
-                "第一天收盤": round(close_1m[stock].loc[d1], 2),
-                "第四天收盤": round(close_1m[stock].loc[d4], 2),
-                "四日累積漲幅": f"{((1+series.loc[d1])*(1+series.loc[d2])*(1+series.loc[d3])*(1+series.loc[d4])-1)*100:.1f}%",
-            })
-
-        # 條件B：連續四天累積漲幅≥30%
         rolling_4 = (1 + series).rolling(4).apply(lambda x: x.prod(), raw=True) - 1
-        dates_b = series.index[rolling_4 >= 0.30]
 
-        for date in dates_b:
+        for date in series.index[rolling_4 >= 0.30]:
             idx = series.index.get_loc(date)
             if idx < 3:
                 continue
             d1, d2, d3, d4 = series.index[idx-3], series.index[idx-2], series.index[idx-1], series.index[idx]
-            if is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3] and is_lu.loc[d4]:
-                continue
-            key = (stock, str(date)[:10], "B")
-            if key in seen5:
-                continue
-            seen5.add(key)
             gain = rolling_4.loc[date]
-            s5.append({
-                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
-                "觸發條件": "四天漲幅≥30%",
-                "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10], "第四天": str(d4)[:10],
-                "第一天收盤": round(close_1m[stock].loc[d1], 2),
-                "第四天收盤": round(close_1m[stock].loc[d4], 2),
-                "四日累積漲幅": f"{gain*100:.1f}%",
-            })
+            cond = "連續四天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3] and is_lu.loc[d4]) else "四天漲幅≥30%"
+            if stock not in s5_dict or gain > float(s5_dict[stock]["四日累積漲幅"].replace("%","")):
+                s5_dict[stock] = {
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "觸發條件": cond,
+                    "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10], "第四天": str(d4)[:10],
+                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                    "第四天收盤": round(close_1m[stock].loc[d4], 2),
+                    "四日累積漲幅": f"{gain*100:.1f}%",
+                }
 
+    s5 = list(s5_dict.values())
     s5.sort(key=lambda x: x["第四天"], reverse=True)
 
-    # 策略六：五手紅盤（最近一個月，五天漲幅≥45%）
-    s6 = []
-    seen6 = set()
+    # 策略六：五手紅盤（最近一個月，五天漲幅≥50%，每支股票只出現一次，保留漲幅最大那段）
+    s6_dict = {}
     for stock in daily_return_1m.columns:
         series = daily_return_1m[stock].dropna()
         if len(series) < 5:
@@ -387,20 +331,20 @@ def get_all_data():
             idx = series.index.get_loc(date)
             if idx < 4:
                 continue
-            key = (stock, str(date)[:10])
-            if key in seen6:
-                continue
-            seen6.add(key)
-            d1, d2, d3, d4, d5 = series.index[idx-4], series.index[idx-3], series.index[idx-2], series.index[idx-1], series.index[idx]
             gain = rolling_5.loc[date]
-            s6.append({
-                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
-                "第一天": str(d1)[:10], "第五天": str(d5)[:10],
-                "第一天收盤": round(close_1m[stock].loc[d1], 2),
-                "第五天收盤": round(close_1m[stock].loc[d5], 2),
-                "五日累積漲幅": f"{gain*100:.1f}%",
-            })
+            # 每支股票只保留漲幅最大的那筆
+            if stock not in s6_dict or gain > float(s6_dict[stock]["五日累積漲幅"].replace("%","")):
+                d1 = series.index[idx-4]
+                d5 = series.index[idx]
+                s6_dict[stock] = {
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "第一天": str(d1)[:10], "第五天": str(d5)[:10],
+                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                    "第五天收盤": round(close_1m[stock].loc[d5], 2),
+                    "五日累積漲幅": f"{gain*100:.1f}%",
+                }
 
+    s6 = list(s6_dict.values())
     s6.sort(key=lambda x: x["第五天"], reverse=True)
 
     return s1, s2, s3, s4, s5, s6
