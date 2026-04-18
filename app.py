@@ -78,15 +78,7 @@ HOME_TEMPLATE = """
             <div class="card-desc">最近一個月內，連續五天累積漲幅≥50%</div>
             <div class="card-count">{{ counts[5] }}</div>
             <div class="card-count-label">符合股票數</div>
-        </a>
-        <a href="/strategy/7" class="card">
-            <div class="card-icon">🚀</div>
-            <div class="card-title">興櫃飆股</div>
-            <div class="card-desc">即時資料，今日價格比昨日均價高≥30%且成交量>500</div>
-            <div class="card-count">{{ counts[6] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
-    </div>
+        </a>    </div>
 
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
 </body>
@@ -182,9 +174,6 @@ def get_all_data():
     stock_info = data.get("company_basic_info")
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
-    # 興櫃股票清單（市場別包含"興櫃"）
-    # 興櫃行業別對照
-    emerging_raw = stock_info[stock_info["市場別"] == "rotc"]["stock_id"].tolist()
 
     close_df = pd.DataFrame(close.values, index=pd.to_datetime(close.index.astype(str)), columns=close.columns)
     open_df = pd.DataFrame(open_.values, index=pd.to_datetime(open_.index.astype(str)), columns=open_.columns)
@@ -394,8 +383,6 @@ def strategy(sid):
             "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
-        7: {"title": "興櫃飆股", "icon": "🚀", "desc": "最近一個月內，興櫃股票任意3天內，第3天收盤比第1天收盤高≥30%",
-            "stocks": s7, "columns": ["股票代號", "股票名稱", "行業別", "昨日均價", "今日最新價", "成交量", "漲幅"]},
     }
 
     if sid not in strategies:
