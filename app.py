@@ -3,6 +3,7 @@ import finlab
 from finlab import data
 import pandas as pd
 from datetime import datetime, timedelta
+import requests
 from flask import Flask, render_template_string
 
 app = Flask(__name__)
@@ -347,7 +348,62 @@ def get_all_data():
     s6 = list(s6_dict.values())
     s6.sort(key=lambda x: x["第五天"], reverse=True)
 
-    return s1, s2, s3, s4, s5, s6
+    # 策略七：處置股跌破10日線
+    s7 = []
+    try:
+        # 抓取目前處置股清單
+        disposal_url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
+        disposal_res = requests.get(disposal_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        disposal_data = disposal_res.json()
+
+        disposal_stocks = {}
+        if disposal_data.get("stat") == "OK":
+            fields = disposal_data.get("fields", [])
+            for row in disposal_data.get("data", []):
+                try:
+                    stock_id = row[2].strip()
+                    stock_name = row[3].strip()
+                    period = row[5].strip() if len(row) > 5 else ""
+                    disposal_stocks[stock_id] = {"name": stock_name, "period": period}
+                except:
+                    continue
+
+        # 計算10日均線並找跌破的
+        for stock_id, info in disposal_stocks.items():
+            try:
+                if stock_id not in close_1yr.columns:
+                    continue
+                prices = close_1yr[stock_id].dropna()
+                if len(prices) < 10:
+                    continue
+
+                ma10 = prices.rolling(10).mean()
+                current_price = prices.iloc[-1]
+                current_ma10 = ma10.iloc[-1]
+
+                if pd.isna(current_ma10):
+                    continue
+
+                if current_price < current_ma10:
+                    diff_pct = (current_price - current_ma10) / current_ma10
+                    s7.append({
+                        "股票代號": stock_id,
+                        "股票名稱": info["name"],
+                        "處置期間": info["period"],
+                        "目前股價": round(current_price, 2),
+                        "10日均線": round(current_ma10, 2),
+                        "跌破幅度": f"{diff_pct*100:.1f}%",
+                    })
+            except:
+                continue
+
+        s7.sort(key=lambda x: float(x["跌破幅度"].replace("%", "")))
+
+    except Exception as e:
+        print(f"處置股API失敗: {e}")
+        s7 = []
+
+    return s1, s2, s3, s4, s5, s6, s7
 
 # 快取資料
 _cache = {"data": None, "time": None}
@@ -361,13 +417,13 @@ def get_cached_data():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
@@ -383,6 +439,8 @@ def strategy(sid):
             "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
+        7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，且收盤價跌破10日均線，跌破最多的在前",
+            "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "10日均線", "跌破幅度"]},
     }
 
     if sid not in strategies:
