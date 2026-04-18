@@ -183,7 +183,10 @@ def get_all_data():
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
     # 興櫃股票清單（市場別包含"興櫃"）
-    emerging_stocks = set(stock_info[stock_info["市場別"] == "rotc"]["stock_id"].tolist())
+    # 興櫃股票代號補零對齊收盤價欄位格式
+    emerging_raw = stock_info[stock_info["市場別"] == "rotc"]["stock_id"].tolist()
+    emerging_stocks = set(emerging_raw)  # 原始格式
+    emerging_stocks_padded = set(s.zfill(4) for s in emerging_raw)  # 補零格式
 
     close_df = pd.DataFrame(close.values, index=pd.to_datetime(close.index.astype(str)), columns=close.columns)
     open_df = pd.DataFrame(open_.values, index=pd.to_datetime(open_.index.astype(str)), columns=open_.columns)
