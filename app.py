@@ -358,40 +358,7 @@ def get_all_data():
     s6 = list(s6_dict.values())
     s6.sort(key=lambda x: x["第五天"], reverse=True)
 
-    # 策略七：興櫃飆股（最近一個月，興櫃股票兩天漲幅≥20%）
-    s7_dict = {}
-    for stock in daily_return_1m.columns:
-        if stock not in emerging_stocks:
-            continue
-        series = daily_return_1m[stock].dropna()
-        if len(series) < 2:
-            continue
-        rolling_2 = (1 + series).rolling(2).apply(lambda x: x.prod(), raw=True) - 1
-        dates = series.index[rolling_2 >= 0.30]
-
-        for date in dates:
-            idx = series.index.get_loc(date)
-            if idx < 1:
-                continue
-            gain = rolling_2.loc[date]
-            if stock not in s7_dict or gain > float(s7_dict[stock]["兩日累積漲幅"].replace("%","")):
-                d1 = series.index[idx-1]
-                d2 = series.index[idx]
-                s7_dict[stock] = {
-                    "股票代號": stock,
-                    "股票名稱": name_dict.get(stock, ""),
-                    "行業別": industry_dict.get(stock, ""),
-                    "第一天": str(d1)[:10],
-                    "第二天": str(d2)[:10],
-                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
-                    "第二天收盤": round(close_1m[stock].loc[d2], 2),
-                    "兩日累積漲幅": f"{gain*100:.1f}%",
-                }
-
-    s7 = list(s7_dict.values())
-    s7.sort(key=lambda x: x["第二天"], reverse=True)
-
-    return s1, s2, s3, s4, s5, s6, s7
+    return s1, s2, s3, s4, s5, s6
 
 # 快取資料
 _cache = {"data": None, "time": None}
@@ -405,13 +372,13 @@ def get_cached_data():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6, s7 = get_cached_data()
+    s1, s2, s3, s4, s5, s6 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6, s7 = get_cached_data()
+    s1, s2, s3, s4, s5, s6 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
