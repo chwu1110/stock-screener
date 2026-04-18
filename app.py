@@ -72,6 +72,13 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[4] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
+        <a href="/strategy/6" class="card">
+            <div class="card-icon">🔴</div>
+            <div class="card-title">五手紅盤</div>
+            <div class="card-desc">最近一個月內，連續五天累積漲幅≥50%</div>
+            <div class="card-count">{{ counts[5] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
     </div>
 
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
@@ -365,7 +372,38 @@ def get_all_data():
 
     s5.sort(key=lambda x: x["第四天"], reverse=True)
 
-    return s1, s2, s3, s4, s5
+    # 策略六：五手紅盤（最近一個月，五天漲幅≥45%）
+    s6 = []
+    seen6 = set()
+    for stock in daily_return_1m.columns:
+        series = daily_return_1m[stock].dropna()
+        if len(series) < 5:
+            continue
+
+        rolling_5 = (1 + series).rolling(5).apply(lambda x: x.prod(), raw=True) - 1
+        dates = series.index[rolling_5 >= 0.50]
+
+        for date in dates:
+            idx = series.index.get_loc(date)
+            if idx < 4:
+                continue
+            key = (stock, str(date)[:10])
+            if key in seen6:
+                continue
+            seen6.add(key)
+            d1, d2, d3, d4, d5 = series.index[idx-4], series.index[idx-3], series.index[idx-2], series.index[idx-1], series.index[idx]
+            gain = rolling_5.loc[date]
+            s6.append({
+                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                "第一天": str(d1)[:10], "第五天": str(d5)[:10],
+                "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                "第五天收盤": round(close_1m[stock].loc[d5], 2),
+                "五日累積漲幅": f"{gain*100:.1f}%",
+            })
+
+    s6.sort(key=lambda x: x["第五天"], reverse=True)
+
+    return s1, s2, s3, s4, s5, s6
 
 # 快取資料
 _cache = {"data": None, "time": None}
@@ -379,13 +417,13 @@ def get_cached_data():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5 = get_cached_data()
+    s1, s2, s3, s4, s5, s6 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5 = get_cached_data()
+    s1, s2, s3, s4, s5, s6 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
@@ -399,6 +437,8 @@ def strategy(sid):
             "stocks": s4, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第一天收盤", "第二天收盤", "第三天收盤", "三日累積漲幅"]},
         5: {"title": "四手紅盤", "icon": "🎰", "desc": "最近一個月內，連續四天漲停 或 連續四天累積漲幅≥30%，依日期由新到舊排列",
             "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
+        6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
+            "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
     }
 
     if sid not in strategies:
