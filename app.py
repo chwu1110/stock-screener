@@ -89,6 +89,13 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[6] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
+        <a href="/strategy/8" class="card">
+            <div class="card-icon">🚀</div>
+            <div class="card-title">興櫃爆量強漲</div>
+            <div class="card-desc">興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%</div>
+            <div class="card-count">{{ counts[7] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
     </div>
 
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
@@ -434,7 +441,89 @@ def get_all_data():
         print(f"處置股API失敗: {e}")
         s7 = []
 
-    return s1, s2, s3, s4, s5, s6, s7
+
+    # 策略八：興櫃爆量強漲
+    s8 = []
+    try:
+        esb_url = "https://www.tpex.org.tw/openapi/v1/tpex_esb_latest_statistics"
+        esb_headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+        resp8 = requests.get(esb_url, headers=esb_headers, timeout=15, verify=False)
+        esb_data = resp8.json()
+
+        def _f(val):
+            s = str(val).replace(",", "").strip()
+            return float(s) if s and s not in ["-", "--"] else 0.0
+
+        esb_today = {}
+        for item in esb_data:
+            try:
+                sid = str(item.get("SecuritiesCompanyCode", "")).strip()
+                if not sid or not sid.isdigit():
+                    continue
+                prev_avg   = _f(item.get("PreviousAveragePrice", 0))
+                latest     = _f(item.get("LatestPrice", 0))
+                volume     = _f(item.get("TransactionVolume", 0))
+                name8      = str(item.get("CompanyName", "")).strip()
+                change_pct = (latest - prev_avg) / prev_avg if prev_avg > 0 and latest > 0 else 0.0
+                esb_today[sid] = {"name": name8, "latest": latest, "prev_avg": prev_avg, "volume": volume, "change_pct": change_pct}
+            except:
+                continue
+
+        avg5_dict = {}
+        try:
+            today_dt = datetime.now()
+            for delta in [0, -1]:
+                m = today_dt.month + delta
+                y = today_dt.year
+                if m <= 0:
+                    m += 12
+                    y -= 1
+                hist_url = f"https://www.tpex.org.tw/openapi/v1/tpex_esb_every_day_statistics?date={y}{m:02d}"
+                hr = requests.get(hist_url, headers=esb_headers, timeout=15, verify=False)
+                if hr.status_code != 200:
+                    continue
+                hist_data = hr.json()
+                if not isinstance(hist_data, list):
+                    continue
+                for row in hist_data:
+                    try:
+                        sid = str(row.get("SecuritiesCompanyCode", "")).strip()
+                        vol = _f(row.get("TransactionVolume", 0))
+                        if sid and sid.isdigit():
+                            avg5_dict.setdefault(sid, []).append(vol)
+                    except:
+                        continue
+        except Exception as e8h:
+            print(f"興櫃歷史資料錯誤: {e8h}")
+
+        for sid, info in esb_today.items():
+            volume   = info["volume"]
+            volume_k = volume / 1000
+            change   = info["change_pct"]
+            vols     = avg5_dict.get(sid, [])
+            avg5     = sum(vols[-5:]) / len(vols[-5:]) if vols else 0
+
+            if avg5 > 0 and volume >= avg5 * 10 and volume_k >= 500 and change >= 0.30:
+                ratio = volume / avg5
+                s8.append({
+                    "股票代號": sid,
+                    "股票名稱": info["name"],
+                    "現價": info["latest"],
+                    "前日均價": info["prev_avg"],
+                    "漲幅": f"{change*100:.1f}%",
+                    "成交張數": f"{int(volume_k):,}",
+                    "5日均量(張)": f"{int(avg5/1000):,}",
+                    "爆量倍數": f"{ratio:.1f}x",
+                })
+
+        s8.sort(key=lambda x: float(x["漲幅"].replace("%", "")), reverse=True)
+
+    except Exception as e8:
+        print(f"興櫃爆量錯誤: {e8}")
+        s8 = []
+
+    return s1, s2, s3, s4, s5, s6, s7, s8
+
 
 # 快取資料
 _cache = {"data": None, "time": None}
@@ -448,13 +537,13 @@ def get_cached_data():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6, s7 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6, s7 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
@@ -472,6 +561,8 @@ def strategy(sid):
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，處置期間內每次收盤價跌破10日均線皆列出，依股票代號與日期排序",
             "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "跌破日期", "收盤價", "10日均線", "跌破幅度"]},
+        8: {"title": "興櫃爆量強漲", "icon": "🚀", "desc": "興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%，依漲幅由高到低排列",
+            "stocks": s8, "columns": ["股票代號", "股票名稱", "現價", "前日均價", "漲幅", "成交張數", "5日均量(張)", "爆量倍數"]},
     }
 
     if sid not in strategies:
