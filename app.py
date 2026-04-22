@@ -498,7 +498,15 @@ def get_all_data():
             vols = avg5_dict.get(sid, [])
             avg5 = sum(vols[-5:]) / len(vols[-5:]) if vols else 0
 
-            if avg5 > 0 and vol_k >= avg5 * 10 and vol_k >= 500 and change >= 0.30:
+            # 爆量條件：成交>=500張、漲幅>=30%
+            # 若有均量資料則額外判斷>=10倍均量
+            vol_ok = vol_k >= 500
+            change_ok = change >= 0.30
+            ratio_ok = (avg5 <= 0) or (vol_k >= avg5 * 10)
+
+            if vol_ok and change_ok and ratio_ok:
+                ratio_str = f"{vol_k/avg5:.1f}x" if avg5 > 0 else "-"
+                avg5_str = f"{int(avg5):,}" if avg5 > 0 else "-"
                 s8.append({
                     "股票代號": sid,
                     "股票名稱": info["name"],
@@ -506,8 +514,8 @@ def get_all_data():
                     "前日均價": info["prev"],
                     "漲幅": f"{change*100:.1f}%",
                     "成交張數": f"{int(vol_k):,}",
-                    "5日均量(張)": f"{int(avg5):,}",
-                    "爆量倍數": f"{vol_k/avg5:.1f}x",
+                    "5日均量(張)": avg5_str,
+                    "爆量倍數": ratio_str,
                 })
 
         s8.sort(key=lambda x: float(x["漲幅"].replace("%","")), reverse=True)
