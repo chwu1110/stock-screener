@@ -96,6 +96,13 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[7] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
+        <a href="/strategy/9" class="card">
+            <div class="card-icon">📉</div>
+            <div class="card-title">興櫃當天拉回</div>
+            <div class="card-desc">興櫃股票當天從最高點拉回幅度≥25%</div>
+            <div class="card-count">{{ counts[8] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
     </div>
 
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
@@ -522,7 +529,53 @@ def get_all_data():
         print(f"興櫃爆量錯誤: {e8}")
         s8 = []
 
-    return s1, s2, s3, s4, s5, s6, s7, s8
+
+    # 策略九：興櫃當天拉回
+    s9 = []
+    try:
+        esb_url9 = "https://www.tpex.org.tw/openapi/v1/tpex_esb_latest_statistics"
+        esb_headers9 = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+        resp9 = requests.get(esb_url9, headers=esb_headers9, timeout=15, verify=False)
+        esb_data9 = resp9.json()
+
+        def _f9(val):
+            s = str(val).replace(",", "").strip()
+            return float(s) if s and s not in ["-", "--"] else 0.0
+
+        for item in esb_data9:
+            try:
+                sid = str(item.get("SecuritiesCompanyCode", "")).strip()
+                if not sid or not sid.isdigit():
+                    continue
+                highest = _f9(item.get("Highest", 0))
+                latest  = _f9(item.get("LatestPrice", 0))
+                name9   = str(item.get("CompanyName", "")).strip()
+                prev_avg = _f9(item.get("PreviousAveragePrice", 0))
+
+                if highest > 0 and latest > 0:
+                    pullback = (highest - latest) / highest
+                    if pullback >= 0.25:
+                        change_pct = (latest - prev_avg) / prev_avg if prev_avg > 0 else 0.0
+                        s9.append({
+                            "股票代號": sid,
+                            "股票名稱": name9,
+                            "今日最高": highest,
+                            "現價": latest,
+                            "前日均價": prev_avg,
+                            "拉回幅度": f"{pullback*100:.1f}%",
+                            "漲跌幅": f"{change_pct*100:.1f}%",
+                        })
+            except:
+                continue
+
+        s9.sort(key=lambda x: float(x["拉回幅度"].replace("%", "")), reverse=True)
+
+    except Exception as e9:
+        print(f"興櫃拉回錯誤: {e9}")
+        s9 = []
+
+    return s1, s2, s3, s4, s5, s6, s7, s8, s9
+
 
 
 # 快取資料
@@ -537,13 +590,13 @@ def get_cached_data():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6, s7, s8 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6, s7, s8 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
@@ -563,6 +616,8 @@ def strategy(sid):
             "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "跌破日期", "收盤價", "10日均線", "跌破幅度"]},
         8: {"title": "興櫃爆量強漲", "icon": "🚀", "desc": "興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%，依漲幅由高到低排列",
             "stocks": s8, "columns": ["股票代號", "股票名稱", "現價", "前日均價", "漲幅", "成交張數", "5日均量(張)", "爆量倍數"]},
+        9: {"title": "興櫃當天拉回", "icon": "📉", "desc": "興櫃股票當天從最高點拉回幅度≥25%，拉回最多的在前",
+            "stocks": s9, "columns": ["股票代號", "股票名稱", "今日最高", "現價", "前日均價", "拉回幅度", "漲跌幅"]},
     }
 
     if sid not in strategies:
