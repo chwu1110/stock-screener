@@ -449,106 +449,95 @@ def get_all_data():
         s7 = []
 
 
-    # 策略八：興櫃爆量強漲（使用 FinLab 興櫃資料）
+    # 策略八：興櫃爆量強漲（用公開API抓今日資料）
     s8 = []
     try:
-        # 用 FinLab 抓興櫃資料
-        data.date_range = (start_1m, end_date)
-        esb_close  = data.get("emerging_stock:收盤價")
-        esb_vol    = data.get("emerging_stock:成交量")
-        esb_open   = data.get("emerging_stock:開盤價")
-        esb_high   = data.get("emerging_stock:最高價")
+        def _esb_float(val):
+            s = str(val).replace(",", "").strip()
+            return float(s) if s and s not in ["-", "--", ""] else 0.0
 
-        esb_close_df = pd.DataFrame(esb_close.values, index=pd.to_datetime(esb_close.index.astype(str)), columns=esb_close.columns)
-        esb_vol_df   = pd.DataFrame(esb_vol.values,   index=pd.to_datetime(esb_vol.index.astype(str)),   columns=esb_vol.columns)
-        esb_high_df  = pd.DataFrame(esb_high.values,  index=pd.to_datetime(esb_high.index.astype(str)),  columns=esb_high.columns)
+        # 抓今日即時資料
+        esb_url = "https://www.tpex.org.tw/openapi/v1/tpex_esb_latest_statistics"
+        esb_h = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+        r8 = requests.get(esb_url, headers=esb_h, timeout=15, verify=False)
+        esb_today = {}
+        for item in r8.json():
+            sid = str(item.get("SecuritiesCompanyCode","")).strip()
+            if not sid or not sid.isdigit(): continue
+            prev = _esb_float(item.get("PreviousAveragePrice",0))
+            latest = _esb_float(item.get("LatestPrice",0))
+            high = _esb_float(item.get("Highest",0))
+            vol = _esb_float(item.get("TransactionVolume",0))
+            name8 = str(item.get("CompanyName","")).strip()
+            change = (latest - prev) / prev if prev > 0 and latest > 0 else 0.0
+            esb_today[sid] = {"name":name8,"latest":latest,"prev":prev,"vol":vol,"change":change,"high":high}
 
-        # 取最後一個交易日
-        last_date = esb_close_df.index[-1]
-        prev_date = esb_close_df.index[-2] if len(esb_close_df) >= 2 else None
-
-        for stock in esb_close_df.columns:
+        # 抓近期歷史成交量（用月資料算5日均量）
+        avg5_dict = {}
+        today_dt = datetime.now()
+        for delta in [0, -1]:
+            m = today_dt.month + delta
+            y = today_dt.year
+            if m <= 0: m += 12; y -= 1
+            hist_url = f"https://www.tpex.org.tw/openapi/v1/tpex_esb_every_day_statistics?date={y}{m:02d}"
+            hr8 = requests.get(hist_url, headers=esb_h, timeout=15, verify=False)
+            if hr8.status_code != 200: continue
             try:
-                today_close = esb_close_df[stock].loc[last_date]
-                today_vol   = esb_vol_df[stock].loc[last_date]   # 單位：張
-                prev_close  = esb_close_df[stock].loc[prev_date] if prev_date is not None else None
+                hdata = hr8.json()
+                if not isinstance(hdata, list): continue
+                for row in hdata:
+                    sid = str(row.get("SecuritiesCompanyCode","")).strip()
+                    vol = _esb_float(row.get("TransactionVolume",0))
+                    if sid and sid.isdigit():
+                        avg5_dict.setdefault(sid,[]).append(vol / 1000)  # 轉換為張
+            except: continue
 
-                if pd.isna(today_close) or pd.isna(today_vol) or today_close <= 0 or today_vol <= 0:
-                    continue
+        for sid, info in esb_today.items():
+            vol_k = info["vol"] / 1000  # 轉換為張
+            change = info["change"]
+            vols = avg5_dict.get(sid, [])
+            avg5 = sum(vols[-5:]) / len(vols[-5:]) if vols else 0
 
-                # 近5日均量（不含今天）
-                past_vols = esb_vol_df[stock].iloc[:-1].dropna()
-                avg5 = past_vols.iloc[-5:].mean() if len(past_vols) >= 1 else 0
+            if avg5 > 0 and vol_k >= avg5 * 10 and vol_k >= 500 and change >= 0.30:
+                s8.append({
+                    "股票代號": sid,
+                    "股票名稱": info["name"],
+                    "收盤價": info["latest"],
+                    "前日均價": info["prev"],
+                    "漲幅": f"{change*100:.1f}%",
+                    "成交張數": f"{int(vol_k):,}",
+                    "5日均量(張)": f"{int(avg5):,}",
+                    "爆量倍數": f"{vol_k/avg5:.1f}x",
+                })
 
-                # 漲幅
-                change_pct = (today_close - prev_close) / prev_close if prev_close and prev_close > 0 else 0
-
-                # 條件：量>=10倍均量、>=500張、漲幅>=30%
-                if avg5 > 0 and today_vol >= avg5 * 10 and today_vol >= 500 and change_pct >= 0.30:
-                    ratio = today_vol / avg5
-                    s8.append({
-                        "股票代號": stock,
-                        "股票名稱": name_dict.get(stock, ""),
-                        "日期": str(last_date)[:10],
-                        "收盤價": round(today_close, 2),
-                        "漲幅": f"{change_pct*100:.1f}%",
-                        "成交張數": f"{int(today_vol):,}",
-                        "5日均量(張)": f"{int(avg5):,}",
-                        "爆量倍數": f"{ratio:.1f}x",
-                    })
-            except:
-                continue
-
-        s8.sort(key=lambda x: float(x["漲幅"].replace("%", "")), reverse=True)
-
+        s8.sort(key=lambda x: float(x["漲幅"].replace("%","")), reverse=True)
     except Exception as e8:
         print(f"興櫃爆量錯誤: {e8}")
         s8 = []
 
 
-    # 策略九：興櫃當天拉回（使用 FinLab 興櫃資料）
+    # 策略九：興櫃當天拉回（用公開API抓今日資料）
     s9 = []
     try:
-        # 重用策略八已抓的資料
-        if 'esb_close_df' not in dir():
-            data.date_range = (start_1m, end_date)
-            esb_close9  = data.get("emerging_stock:收盤價")
-            esb_high9   = data.get("emerging_stock:最高價")
-            esb_close_df9 = pd.DataFrame(esb_close9.values, index=pd.to_datetime(esb_close9.index.astype(str)), columns=esb_close9.columns)
-            esb_high_df9  = pd.DataFrame(esb_high9.values,  index=pd.to_datetime(esb_high9.index.astype(str)),  columns=esb_high9.columns)
-        else:
-            esb_close_df9 = esb_close_df
-            esb_high_df9  = esb_high_df
-
-        last_date9 = esb_close_df9.index[-1]
-        prev_date9 = esb_close_df9.index[-2] if len(esb_close_df9) >= 2 else None
-
-        for stock in esb_close_df9.columns:
-            try:
-                today_close9 = esb_close_df9[stock].loc[last_date9]
-                today_high9  = esb_high_df9[stock].loc[last_date9]
-                prev_close9  = esb_close_df9[stock].loc[prev_date9] if prev_date9 is not None else None
-
-                if pd.isna(today_close9) or pd.isna(today_high9) or today_high9 <= 0 or today_close9 <= 0:
-                    continue
-
-                pullback = (today_high9 - today_close9) / today_high9
+        # 重用策略八的今日資料
+        for sid, info in esb_today.items():
+            high = info["high"]
+            latest = info["latest"]
+            prev = info["prev"]
+            if high > 0 and latest > 0:
+                pullback = (high - latest) / high
                 if pullback >= 0.25:
-                    change_pct9 = (today_close9 - prev_close9) / prev_close9 if prev_close9 and prev_close9 > 0 else 0
+                    change = info["change"]
                     s9.append({
-                        "股票代號": stock,
-                        "股票名稱": name_dict.get(stock, ""),
-                        "日期": str(last_date9)[:10],
-                        "今日最高": round(today_high9, 2),
-                        "收盤價": round(today_close9, 2),
+                        "股票代號": sid,
+                        "股票名稱": info["name"],
+                        "今日最高": high,
+                        "現價": latest,
+                        "前日均價": prev,
                         "拉回幅度": f"{pullback*100:.1f}%",
-                        "漲跌幅": f"{change_pct9*100:.1f}%",
+                        "漲跌幅": f"{change*100:.1f}%",
                     })
-            except:
-                continue
-
-        s9.sort(key=lambda x: float(x["拉回幅度"].replace("%", "")), reverse=True)
-
+        s9.sort(key=lambda x: float(x["拉回幅度"].replace("%","")), reverse=True)
     except Exception as e9:
         print(f"興櫃拉回錯誤: {e9}")
         s9 = []
@@ -594,9 +583,9 @@ def strategy(sid):
         7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，處置期間內每次收盤價跌破10日均線皆列出，依股票代號與日期排序",
             "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "跌破日期", "收盤價", "10日均線", "跌破幅度"]},
         8: {"title": "興櫃爆量強漲", "icon": "🚀", "desc": "興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%，依漲幅由高到低排列",
-            "stocks": s8, "columns": ["股票代號", "股票名稱", "日期", "收盤價", "漲幅", "成交張數", "5日均量(張)", "爆量倍數"]},
+            "stocks": s8, "columns": ["股票代號", "股票名稱", "收盤價", "前日均價", "漲幅", "成交張數", "5日均量(張)", "爆量倍數"]},
         9: {"title": "興櫃當天拉回", "icon": "📉", "desc": "興櫃股票當天從最高點拉回幅度≥25%，拉回最多的在前",
-            "stocks": s9, "columns": ["股票代號", "股票名稱", "日期", "今日最高", "收盤價", "拉回幅度", "漲跌幅"]},
+            "stocks": s9, "columns": ["股票代號", "股票名稱", "今日最高", "現價", "前日均價", "拉回幅度", "漲跌幅"]},
     }
 
     if sid not in strategies:
