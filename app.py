@@ -588,7 +588,12 @@ def get_all_data():
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
     open_1m = open_df[open_df.index >= pd.to_datetime(start_1m)]
 
+    low_ = data.get("price:最低價")
+    low_df = pd.DataFrame(low_.values, index=pd.to_datetime(low_.index.astype(str)), columns=low_.columns)
+    low_1m = low_df[low_df.index >= pd.to_datetime(start_1m)]
+
     def gap_stars(stock, dates):
+        """判斷是否為跳空漲停（一價到底）：開盤＝漲停價 且 最低＝漲停價"""
         stars = 0
         for d in dates:
             try:
@@ -597,8 +602,13 @@ def get_all_data():
                     continue
                 prev_c = close_1m[stock].iloc[idx - 1]
                 open_p = open_1m[stock].loc[d] if d in open_1m.index else None
-                if pd.notna(prev_c) and open_p is not None and pd.notna(open_p) and prev_c > 0:
-                    if open_p > prev_c:
+                low_p  = low_1m[stock].loc[d]  if d in low_1m.index  else None
+                if (pd.notna(prev_c) and prev_c > 0
+                        and open_p is not None and pd.notna(open_p)
+                        and low_p  is not None and pd.notna(low_p)):
+                    limit_up = round(prev_c * 1.1, 2)
+                    # 一價到底：開盤 ≈ 漲停價 且 最低 ≈ 漲停價
+                    if abs(open_p - limit_up) < 0.02 and abs(low_p - limit_up) < 0.02:
                         stars += 1
             except:
                 pass
@@ -756,9 +766,12 @@ def get_all_data():
             # 每支股票只保留漲幅最大的那筆
             if stock not in s6_dict or gain > float(s6_dict[stock]["五日累積漲幅"].replace("%","")):
                 d1 = series.index[idx-4]
+                d2 = series.index[idx-3]
+                d3 = series.index[idx-2]
+                d4 = series.index[idx-1]
                 d5 = series.index[idx]
                 s6_dict[stock] = {
-                    "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [d1, d5]),
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [d1, d2, d3, d4, d5]),
                     "第一天": str(d1)[:10], "第五天": str(d5)[:10],
                     "第一天收盤": round(close_1m[stock].loc[d1], 2),
                     "第五天收盤": round(close_1m[stock].loc[d5], 2),
