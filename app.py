@@ -747,20 +747,50 @@ def get_all_data():
 
         for stock_id, info in disposal_stocks12.items():
             try:
+                # ===== DEBUG LOG =====
+                is_target = stock_id == "7721"
+                if is_target:
+                    print(f"[DEBUG 7721] 開始檢查")
+
                 if stock_id not in close_3m.columns:
+                    if is_target:
+                        print(f"[DEBUG 7721] ❌ 不在 close_3m.columns，資料未撈到！")
+                        print(f"[DEBUG 7721] close_3m 共 {len(close_3m.columns)} 支股票，日期範圍: {close_3m.index[0].date()} ~ {close_3m.index[-1].date()}")
                     continue
+
                 prices = close_3m[stock_id].dropna()
+
+                if is_target:
+                    print(f"[DEBUG 7721] ✅ 在 close_3m，共 {len(prices)} 筆資料")
+                    if len(prices) > 0:
+                        print(f"[DEBUG 7721] 最近5筆收盤價: {prices.tail(5).tolist()}")
+
                 if len(prices) < 20:
+                    if is_target:
+                        print(f"[DEBUG 7721] ❌ 資料筆數不足 20 筆，實際 {len(prices)} 筆")
                     continue
 
                 ma20 = prices.rolling(20).mean()
                 current_price = prices.iloc[-1]
                 current_ma20  = ma20.iloc[-1]
 
+                if is_target:
+                    print(f"[DEBUG 7721] 現價: {current_price}, MA20: {current_ma20:.2f}")
+
                 if pd.isna(current_ma20) or current_ma20 <= 0:
+                    if is_target:
+                        print(f"[DEBUG 7721] ❌ MA20 無效: {current_ma20}")
                     continue
 
                 diff_pct = (current_price - current_ma20) / current_ma20
+
+                if is_target:
+                    print(f"[DEBUG 7721] 偏離幅度: {diff_pct*100:.1f}%，篩選條件: ±3%")
+                    if abs(diff_pct) <= 0.03:
+                        print(f"[DEBUG 7721] ✅ 通過篩選，應該要出現在結果！")
+                    else:
+                        print(f"[DEBUG 7721] ❌ 偏離超過 3%，被篩掉")
+                # ===== END DEBUG =====
 
                 # 在月線上下3%以內
                 if abs(diff_pct) <= 0.03:
@@ -772,7 +802,9 @@ def get_all_data():
                         "20日均線": round(current_ma20, 2),
                         "偏離幅度": f"{diff_pct*100:.1f}%",
                     })
-            except:
+            except Exception as e:
+                if stock_id == "7721":
+                    print(f"[DEBUG 7721] ❌ 發生例外: {e}")
                 continue
 
         s12.sort(key=lambda x: abs(float(x["偏離幅度"].replace("%", ""))))
