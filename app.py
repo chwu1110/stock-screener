@@ -492,6 +492,24 @@ def get_all_data():
     close_1m = close_df[close_df.index >= pd.to_datetime(start_1m)]
     close_2026 = close_df[close_df.index >= pd.to_datetime(start_2026)]
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
+    open_1m = open_df[open_df.index >= pd.to_datetime(start_1m)]
+
+    def gap_stars(stock, dates):
+        stars = 0
+        for d in dates:
+            try:
+                idx = close_1m.index.get_loc(d)
+                if idx < 1:
+                    continue
+                prev_c = close_1m[stock].iloc[idx - 1]
+                open_p = open_1m[stock].loc[d] if d in open_1m.index else None
+                if pd.notna(prev_c) and open_p is not None and pd.notna(open_p) and prev_c > 0:
+                    if open_p > prev_c:
+                        stars += 1
+            except:
+                pass
+        return "u2b50" * stars if stars > 0 else ""
+
 
     # 策略一：二手紅盤（最近一個月）
     daily_return_1m = close_1m.pct_change()
@@ -505,7 +523,7 @@ def get_all_data():
             prev_idx = is_limit_up.index.get_loc(date) - 1
             prev_date = is_limit_up.index[prev_idx]
             s1.append({
-                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [prev_date, date]),
                 "第一天漲停日": str(prev_date)[:10], "第二天漲停日": str(date)[:10],
                 "第一天收盤": round(close_1m[stock].loc[prev_date], 2),
                 "第二天收盤": round(close_1m[stock].loc[date], 2),
@@ -585,7 +603,7 @@ def get_all_data():
             cond = "連續三天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3]) else "三天漲幅≥30%"
             if stock not in s4_dict or gain > float(s4_dict[stock]["三日累積漲幅"].replace("%","")):
                 s4_dict[stock] = {
-                    "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [d1, d2, d3]),
                     "觸發條件": cond,
                     "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10],
                     "第一天收盤": round(close_1m[stock].loc[d1], 2),
@@ -615,7 +633,7 @@ def get_all_data():
             cond = "連續四天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3] and is_lu.loc[d4]) else "四天漲幅≥40%"
             if stock not in s5_dict or gain > float(s5_dict[stock]["四日累積漲幅"].replace("%","")):
                 s5_dict[stock] = {
-                    "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [d1, d2, d3, d4]),
                     "觸發條件": cond,
                     "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10], "第四天": str(d4)[:10],
                     "第一天收盤": round(close_1m[stock].loc[d1], 2),
@@ -646,7 +664,7 @@ def get_all_data():
                 d1 = series.index[idx-4]
                 d5 = series.index[idx]
                 s6_dict[stock] = {
-                    "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [d1, d5]),
                     "第一天": str(d1)[:10], "第五天": str(d5)[:10],
                     "第一天收盤": round(close_1m[stock].loc[d1], 2),
                     "第五天收盤": round(close_1m[stock].loc[d5], 2),
