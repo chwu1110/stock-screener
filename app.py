@@ -108,6 +108,7 @@ HOME_TEMPLATE = """
             <div class="card-desc">兩個月內曾被處置的股票，股價在20日均線上下3%以內</div>
             <div class="card-count">{{ counts[11] }}</div>
             <div class="card-count-label">符合股票數</div>
+            <div style="margin-top:10px;font-size:12px;color:#38bdf8;">🔴 <a href="/strategy/12/realtime" style="color:#38bdf8;">即時版（盤中）</a></div>
         </a>
     </div>
 
@@ -213,6 +214,226 @@ DETAIL_TEMPLATE = """
 </html>
 """
 
+REALTIME_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 處置股來到月線（即時）</title>
+    <meta http-equiv="refresh" content="300">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; padding: 30px; }
+        .back { display: inline-block; margin-bottom: 20px; color: #38bdf8; text-decoration: none; font-size: 14px; }
+        .back:hover { text-decoration: underline; }
+        h1 { font-size: 22px; margin-bottom: 6px; color: #f8fafc; }
+        .subtitle { color: #94a3b8; font-size: 13px; margin-bottom: 8px; }
+        .badge { display: inline-block; background: #1e3a5f; color: #38bdf8; border-radius: 6px; padding: 3px 10px; font-size: 12px; margin-bottom: 20px; }
+        .stat-box { display: inline-block; background: #1e293b; border-radius: 10px; padding: 8px 20px; margin-bottom: 20px; }
+        .stat-box .num { font-size: 22px; font-weight: bold; color: #38bdf8; }
+        .stat-box .label { font-size: 12px; color: #94a3b8; }
+        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden; }
+        thead tr { background: #0f172a; }
+        th { padding: 12px 16px; text-align: left; font-size: 13px; color: #94a3b8; font-weight: 600; }
+        td { padding: 11px 16px; font-size: 14px; border-top: 1px solid #334155; }
+        tr:hover td { background: #263548; }
+        .stock-id { color: #38bdf8; font-weight: bold; }
+        .gain { color: #4ade80; font-weight: bold; }
+        .loss { color: #f87171; font-weight: bold; }
+        .empty { text-align: center; color: #94a3b8; padding: 40px; background: #1e293b; border-radius: 12px; }
+        .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 20px; }
+        .countdown { text-align: center; color: #64748b; font-size: 12px; margin-top: 6px; }
+    </style>
+    <script>
+        let secs = 300;
+        setInterval(() => {
+            secs--;
+            const el = document.getElementById('cd');
+            if (el) el.textContent = secs + ' 秒後自動刷新';
+            if (secs <= 0) location.reload();
+        }, 1000);
+    </script>
+</head>
+<body>
+    <a href="/" class="back">← 返回首頁</a>
+    <h1>📊 處置股來到月線</h1>
+    <p class="subtitle">兩個月內曾被處置的股票，即時股價在20日均線上下3%以內，偏離最小的在前</p>
+    <div class="badge">🔴 即時模式｜每5分鐘自動更新</div><br>
+
+    <div class="stat-box">
+        <div class="num">{{ stocks|length }}</div>
+        <div class="label">符合股票數</div>
+    </div>
+
+    {% if stocks %}
+    <table>
+        <thead>
+            <tr>
+                <th>股票代號</th><th>股票名稱</th><th>處置期間</th>
+                <th>即時股價</th><th>20日均線</th><th>偏離幅度</th><th>資料時間</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in stocks %}
+            <tr>
+                <td class="stock-id">{{ s['股票代號'] }}</td>
+                <td>{{ s['股票名稱'] }}</td>
+                <td>{{ s['處置期間'] }}</td>
+                <td class="{{ 'gain' if s['偏離幅度'][0] != '-' else 'loss' }}">{{ s['即時股價'] }}</td>
+                <td>{{ s['20日均線'] }}</td>
+                <td class="{{ 'gain' if s['偏離幅度'][0] != '-' else 'loss' }}">{{ s['偏離幅度'] }}</td>
+                <td>{{ s['資料時間'] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty">❌ 目前沒有處置股來到月線（即時股價更新中...）</div>
+    {% endif %}
+
+    <p class="updated">MA20 來源：FinLab｜即時股價：證交所／櫃買｜更新時間：{{ update_time }}</p>
+    <p class="countdown" id="cd">300 秒後自動刷新</p>
+</body>
+</html>
+"""
+
+# ========== 即時股價快取 ==========
+_realtime_cache = {"prices": {}, "time": None}
+_ma20_cache = {"data": {}, "time": None}  # {stock_id: ma20_value}
+
+def get_twse_realtime(stock_ids):
+    """從證交所抓上市即時股價，一次最多50檔"""
+    prices = {}
+    try:
+        ids_str = "|".join(stock_ids)
+        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, headers=headers, timeout=10)
+        data = resp.json()
+        now_str = datetime.now().strftime("%H:%M")
+        for item in data.get("msgArray", []):
+            sid = item.get("c", "")
+            price_str = item.get("z", "-")  # 最新成交價
+            if price_str and price_str != "-":
+                try:
+                    prices[sid] = {"price": float(price_str), "time": now_str}
+                except:
+                    pass
+    except Exception as e:
+        print(f"證交所即時API錯誤: {e}")
+    return prices
+
+def get_tpex_realtime(stock_ids):
+    """從櫃買中心抓上櫃即時股價"""
+    prices = {}
+    try:
+        ids_str = "|".join([f"otc_{sid}.tw" for sid in stock_ids])
+        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, headers=headers, timeout=10)
+        data = resp.json()
+        now_str = datetime.now().strftime("%H:%M")
+        for item in data.get("msgArray", []):
+            sid = item.get("c", "")
+            price_str = item.get("z", "-")
+            if price_str and price_str != "-":
+                try:
+                    prices[sid] = {"price": float(price_str), "time": now_str}
+                except:
+                    pass
+    except Exception as e:
+        print(f"櫃買即時API錯誤: {e}")
+    return prices
+
+def get_realtime_prices(stock_ids):
+    """抓所有處置股的即時股價（自動判斷上市/上櫃）"""
+    now = datetime.now()
+    # 非交易時間直接回傳空
+    if now.weekday() >= 5:
+        return {}
+    if not (9 <= now.hour < 13 or (now.hour == 13 and now.minute <= 30)):
+        return {}
+
+    # 5分鐘快取
+    if _realtime_cache["time"] and (now - _realtime_cache["time"]).seconds < 300:
+        return _realtime_cache["prices"]
+
+    prices = {}
+    # 全部先試上市，再試上櫃（同一個API，用 tse_ 或 otc_ 前綴）
+    # 分批處理（每批50檔）
+    twse_ids = [f"tse_{sid}.tw" for sid in stock_ids]
+    tpex_ids = [f"otc_{sid}.tw" for sid in stock_ids]
+
+    batch_size = 50
+    now_str = datetime.now().strftime("%H:%M")
+
+    for batch in [twse_ids[i:i+batch_size] for i in range(0, len(twse_ids), batch_size)]:
+        try:
+            ids_str = "|".join(batch)
+            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+            for item in resp.json().get("msgArray", []):
+                sid = item.get("c", "")
+                p = item.get("z", "-")
+                if p and p != "-":
+                    try:
+                        prices[sid] = {"price": float(p), "time": now_str}
+                    except:
+                        pass
+        except:
+            pass
+
+    # 沒抓到的再試上櫃
+    missing = [sid for sid in stock_ids if sid not in prices]
+    for batch in [missing[i:i+batch_size] for i in range(0, len(missing), batch_size)]:
+        try:
+            ids_str = "|".join([f"otc_{sid}.tw" for sid in batch])
+            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+            for item in resp.json().get("msgArray", []):
+                sid = item.get("c", "")
+                p = item.get("z", "-")
+                if p and p != "-":
+                    try:
+                        prices[sid] = {"price": float(p), "time": now_str}
+                    except:
+                        pass
+        except:
+            pass
+
+    _realtime_cache["prices"] = prices
+    _realtime_cache["time"] = now
+    print(f"即時股價: 抓到 {len(prices)}/{len(stock_ids)} 檔")
+    return prices
+
+def get_ma20_cache(disposal_stocks_2m, close_3m):
+    """計算並快取所有處置股的 MA20，30分鐘更新一次"""
+    now = datetime.now()
+    if _ma20_cache["time"] and (now - _ma20_cache["time"]).seconds < 1800:
+        return _ma20_cache["data"]
+
+    ma20_dict = {}
+    for stock_id in disposal_stocks_2m:
+        try:
+            if stock_id not in close_3m.columns:
+                continue
+            prices = close_3m[stock_id].dropna()
+            if len(prices) < 20:
+                continue
+            ma20 = prices.rolling(20).mean().iloc[-1]
+            if pd.isna(ma20) or ma20 <= 0:
+                continue
+            ma20_dict[stock_id] = round(ma20, 2)
+        except:
+            continue
+
+    _ma20_cache["data"] = ma20_dict
+    _ma20_cache["time"] = now
+    print(f"MA20 快取更新: {len(ma20_dict)} 檔")
+    return ma20_dict
+
+
 def get_all_data():
     finlab.login(FINLAB_API_KEY)
 
@@ -242,6 +463,11 @@ def get_all_data():
                 if sid not in disposal_stocks_2m:
                     disposal_stocks_2m[sid] = info
     print(f"兩個月內處置股數: {len(disposal_stocks_2m)}, 含7721: {'7721' in disposal_stocks_2m}")
+
+    # 存進全域，供即時策略12使用
+    global _global_disposal_2m
+    _global_disposal_2m = disposal_stocks_2m
+
     start_1m = (today - timedelta(days=30)).strftime("%Y-%m-%d")
     end_date = today.strftime("%Y-%m-%d")
 
@@ -258,6 +484,11 @@ def get_all_data():
 
     close_1yr = close_df[close_df.index >= pd.to_datetime(start_1yr)]
     close_3m = close_df[close_df.index >= pd.to_datetime(start_3m)]
+
+    # 存進全域，供即時策略12使用
+    global _global_close_3m
+    _global_close_3m = close_3m
+
     close_1m = close_df[close_df.index >= pd.to_datetime(start_1m)]
     close_2026 = close_df[close_df.index >= pd.to_datetime(start_2026)]
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
@@ -747,52 +978,21 @@ def get_all_data():
 
         for stock_id, info in disposal_stocks12.items():
             try:
-                # ===== DEBUG LOG =====
-                is_target = stock_id == "7721"
-                if is_target:
-                    print(f"[DEBUG 7721] 開始檢查")
-
                 if stock_id not in close_3m.columns:
-                    if is_target:
-                        print(f"[DEBUG 7721] ❌ 不在 close_3m.columns，資料未撈到！")
-                        print(f"[DEBUG 7721] close_3m 共 {len(close_3m.columns)} 支股票，日期範圍: {close_3m.index[0].date()} ~ {close_3m.index[-1].date()}")
                     continue
-
                 prices = close_3m[stock_id].dropna()
-
-                if is_target:
-                    print(f"[DEBUG 7721] ✅ 在 close_3m，共 {len(prices)} 筆資料")
-                    if len(prices) > 0:
-                        print(f"[DEBUG 7721] 最近5筆收盤價: {prices.tail(5).tolist()}")
-
                 if len(prices) < 20:
-                    if is_target:
-                        print(f"[DEBUG 7721] ❌ 資料筆數不足 20 筆，實際 {len(prices)} 筆")
                     continue
 
                 ma20 = prices.rolling(20).mean()
                 current_price = prices.iloc[-1]
                 current_ma20  = ma20.iloc[-1]
 
-                if is_target:
-                    print(f"[DEBUG 7721] 現價: {current_price}, MA20: {current_ma20:.2f}")
-
                 if pd.isna(current_ma20) or current_ma20 <= 0:
-                    if is_target:
-                        print(f"[DEBUG 7721] ❌ MA20 無效: {current_ma20}")
                     continue
 
                 diff_pct = (current_price - current_ma20) / current_ma20
 
-                if is_target:
-                    print(f"[DEBUG 7721] 偏離幅度: {diff_pct*100:.1f}%，篩選條件: ±3%")
-                    if abs(diff_pct) <= 0.03:
-                        print(f"[DEBUG 7721] ✅ 通過篩選，應該要出現在結果！")
-                    else:
-                        print(f"[DEBUG 7721] ❌ 偏離超過 3%，被篩掉")
-                # ===== END DEBUG =====
-
-                # 在月線上下3%以內
                 if abs(diff_pct) <= 0.03:
                     s12.append({
                         "股票代號": stock_id,
@@ -802,9 +1002,7 @@ def get_all_data():
                         "20日均線": round(current_ma20, 2),
                         "偏離幅度": f"{diff_pct*100:.1f}%",
                     })
-            except Exception as e:
-                if stock_id == "7721":
-                    print(f"[DEBUG 7721] ❌ 發生例外: {e}")
+            except:
                 continue
 
         s12.sort(key=lambda x: abs(float(x["偏離幅度"].replace("%", ""))))
@@ -822,6 +1020,8 @@ def get_all_data():
 
 # 快取資料
 _cache = {"data": None, "time": None}
+_global_disposal_2m = {}
+_global_close_3m = None
 
 def get_cached_data():
     now = datetime.now()
@@ -829,6 +1029,62 @@ def get_cached_data():
         _cache["data"] = get_all_data()
         _cache["time"] = now
     return _cache["data"]
+
+@app.route("/strategy/12/realtime")
+def strategy12_realtime():
+    """策略12 即時版 - 用證交所即時股價"""
+    # 確保主資料已載入（MA20 需要）
+    get_cached_data()
+
+    update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    s12_rt = []
+
+    try:
+        if not _global_disposal_2m or _global_close_3m is None:
+            return render_template_string(REALTIME_TEMPLATE, stocks=[], update_time=update_time)
+
+        # 取得 MA20（30分鐘快取）
+        ma20_dict = get_ma20_cache(_global_disposal_2m, _global_close_3m)
+
+        # 取得即時股價（5分鐘快取）
+        stock_ids = list(ma20_dict.keys())
+        realtime_prices = get_realtime_prices(stock_ids)
+
+        for stock_id, ma20 in ma20_dict.items():
+            info = _global_disposal_2m.get(stock_id, {})
+
+            # 優先用即時價，沒有就用 FinLab 昨收
+            if stock_id in realtime_prices:
+                current_price = realtime_prices[stock_id]["price"]
+                price_time = realtime_prices[stock_id]["time"]
+            else:
+                # 非交易時間 fallback 用 FinLab 收盤價
+                try:
+                    prices_hist = _global_close_3m[stock_id].dropna()
+                    current_price = prices_hist.iloc[-1]
+                    price_time = "昨收"
+                except:
+                    continue
+
+            diff_pct = (current_price - ma20) / ma20
+
+            if abs(diff_pct) <= 0.03:
+                s12_rt.append({
+                    "股票代號": stock_id,
+                    "股票名稱": info.get("name", ""),
+                    "處置期間": info.get("period", ""),
+                    "即時股價": round(current_price, 2),
+                    "20日均線": ma20,
+                    "偏離幅度": f"{diff_pct*100:.1f}%",
+                    "資料時間": price_time,
+                })
+
+        s12_rt.sort(key=lambda x: abs(float(x["偏離幅度"].replace("%", ""))))
+
+    except Exception as e:
+        print(f"即時策略12錯誤: {e}")
+
+    return render_template_string(REALTIME_TEMPLATE, stocks=s12_rt, update_time=update_time)
 
 @app.route("/")
 def home():
