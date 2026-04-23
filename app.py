@@ -508,7 +508,7 @@ def get_all_data():
                         stars += 1
             except:
                 pass
-        return "u2b50" * stars if stars > 0 else ""
+        return "★" * stars if stars > 0 else ""
 
 
     # 策略一：二手紅盤（最近一個月）
