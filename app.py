@@ -3,6 +3,7 @@ import finlab
 from finlab import data
 import pandas as pd
 from datetime import datetime, timedelta
+import json
 import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -219,6 +220,25 @@ def get_all_data():
     start_2026 = "2026-01-01"
     start_1yr = (today - timedelta(days=90)).strftime("%Y-%m-%d")  # 改為3個月，加快速度
     start_3m = (today - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    # 載入處置股歷史資料（由 save_disposal.py 每天更新）
+    disposal_history = {}
+    try:
+        history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
+        if os.path.exists(history_path):
+            with open(history_path, "r", encoding="utf-8") as f:
+                disposal_history = json.load(f)
+    except Exception as e:
+        print(f"讀取處置股歷史失敗: {e}")
+
+    # 整合兩個月內的歷史處置股
+    two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
+    disposal_stocks_2m = {}
+    for date_str, stocks in disposal_history.items():
+        if date_str >= two_months_ago:
+            for sid, info in stocks.items():
+                if sid not in disposal_stocks_2m:
+                    disposal_stocks_2m[sid] = info
     start_1m = (today - timedelta(days=30)).strftime("%Y-%m-%d")
     end_date = today.strftime("%Y-%m-%d")
 
@@ -584,21 +604,7 @@ def get_all_data():
     # 策略十：處置股拉回（兩個月內被處置，且連續下跌5天）
     s10 = []
     try:
-        # 抓取近兩個月的處置股（包含已結束的）
-        disposal_url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
-        disposal_res = requests.get(disposal_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-        disposal_raw = disposal_res.json()
-
-        disposal_stocks = {}
-        if disposal_raw.get("stat") == "OK":
-            for row in disposal_raw.get("data", []):
-                try:
-                    stock_id   = row[2].strip()
-                    stock_name = row[3].strip()
-                    period     = row[5].strip() if len(row) > 5 else ""
-                    disposal_stocks[stock_id] = {"name": stock_name, "period": period}
-                except:
-                    continue
+        disposal_stocks = disposal_stocks_2m  # 使用歷史處置股資料
 
         # 計算連續下跌天數
         two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
@@ -734,20 +740,7 @@ def get_all_data():
     # 策略十二：處置股來到月線（兩個月內被處置，股價在20日均線上下3%）
     s12 = []
     try:
-        disposal_url12 = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
-        disposal_res12 = requests.get(disposal_url12, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-        disposal_raw12 = disposal_res12.json()
-
-        disposal_stocks12 = {}
-        if disposal_raw12.get("stat") == "OK":
-            for row in disposal_raw12.get("data", []):
-                try:
-                    stock_id   = row[2].strip()
-                    stock_name = row[3].strip()
-                    period     = row[5].strip() if len(row) > 5 else ""
-                    disposal_stocks12[stock_id] = {"name": stock_name, "period": period}
-                except:
-                    continue
+        disposal_stocks12 = disposal_stocks_2m  # 使用歷史處置股資料
 
         for stock_id, info in disposal_stocks12.items():
             try:
