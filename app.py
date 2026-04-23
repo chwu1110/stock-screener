@@ -225,9 +225,11 @@ def get_all_data():
     disposal_history = {}
     try:
         history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
+        print(f"處置股歷史路徑: {history_path}, 存在: {os.path.exists(history_path)}")
         if os.path.exists(history_path):
             with open(history_path, "r", encoding="utf-8") as f:
                 disposal_history = json.load(f)
+            print(f"處置股歷史天數: {len(disposal_history)}, 含7721: {'7721' in str(disposal_history)}")
     except Exception as e:
         print(f"讀取處置股歷史失敗: {e}")
 
@@ -239,6 +241,7 @@ def get_all_data():
             for sid, info in stocks.items():
                 if sid not in disposal_stocks_2m:
                     disposal_stocks_2m[sid] = info
+    print(f"兩個月內處置股數: {len(disposal_stocks_2m)}, 含7721: {'7721' in disposal_stocks_2m}")
     start_1m = (today - timedelta(days=30)).strftime("%Y-%m-%d")
     end_date = today.strftime("%Y-%m-%d")
 
