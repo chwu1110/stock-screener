@@ -169,6 +169,22 @@ DETAIL_TEMPLATE = """
         .stock-id { color: #38bdf8; font-weight: bold; }
         .empty { text-align: center; color: #94a3b8; padding: 40px; background: #1e293b; border-radius: 12px; }
         .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 20px; }
+        .stock-id-cell { display: flex; align-items: center; gap: 8px; }
+        .copy-btn {
+            background: #1e3a5f; border: 1px solid #2d5a8e; color: #7dd3fc;
+            border-radius: 5px; padding: 2px 8px; font-size: 11px; cursor: pointer;
+            transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+        }
+        .copy-btn:hover { background: #2d5a8e; color: #e0f2fe; }
+        .copy-btn.copied { background: #14532d; border-color: #166534; color: #4ade80; }
+        .copy-all-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #1e3a5f; border: 1px solid #2d5a8e; color: #7dd3fc;
+            border-radius: 8px; padding: 7px 16px; font-size: 13px; cursor: pointer;
+            margin-bottom: 14px; transition: all 0.15s;
+        }
+        .copy-all-btn:hover { background: #2d5a8e; color: #e0f2fe; }
+        .copy-all-btn.copied { background: #14532d; border-color: #166534; color: #4ade80; }
     </style>
 </head>
 <body>
@@ -182,6 +198,11 @@ DETAIL_TEMPLATE = """
     </div>
 
     {% if stocks %}
+    <div>
+        <button class="copy-all-btn" onclick="copyAll(this)">
+            <span class="btn-icon">📋</span><span class="btn-text">複製全部代號</span>
+        </button>
+    </div>
     <table>
         <thead>
             <tr>
@@ -199,7 +220,16 @@ DETAIL_TEMPLATE = """
                     {% elif '漲幅' in col or '收盤' in col or '漲停' in col %}gain
                     {% elif '修正' in col or '開盤' in col %}loss
                     {% endif %}
-                ">{{ s[col] }}</td>
+                ">
+                    {% if col == '股票代號' %}
+                    <div class="stock-id-cell">
+                        <span>{{ s[col] }}</span>
+                        <button class="copy-btn" onclick="copySingle(this, '{{ s[col] }}')">複製</button>
+                    </div>
+                    {% else %}
+                    {{ s[col] }}
+                    {% endif %}
+                </td>
                 {% endfor %}
             </tr>
             {% endfor %}
@@ -210,6 +240,64 @@ DETAIL_TEMPLATE = """
     {% endif %}
 
     <p class="updated">資料來源：FinLab｜更新時間：{{ update_time }}</p>
+
+    <script>
+        function copySingle(btn, code) {
+            navigator.clipboard.writeText(code).then(function() {
+                btn.textContent = '✓';
+                btn.classList.add('copied');
+                setTimeout(function() {
+                    btn.textContent = '複製';
+                    btn.classList.remove('copied');
+                }, 1500);
+            }).catch(function() {
+                fallbackCopy(code);
+                btn.textContent = '✓';
+                btn.classList.add('copied');
+                setTimeout(function() {
+                    btn.textContent = '複製';
+                    btn.classList.remove('copied');
+                }, 1500);
+            });
+        }
+
+        function copyAll(btn) {
+            var codes = [];
+            document.querySelectorAll('tbody .stock-id-cell span').forEach(function(el) {
+                codes.push(el.textContent.trim());
+            });
+            var text = codes.join('\\n');
+            navigator.clipboard.writeText(text).then(function() {
+                showCopied(btn, codes.length);
+            }).catch(function() {
+                fallbackCopy(text);
+                showCopied(btn, codes.length);
+            });
+        }
+
+        function showCopied(btn, count) {
+            btn.querySelector('.btn-icon').textContent = '✓';
+            btn.querySelector('.btn-text').textContent = '已複製 ' + count + ' 個代號';
+            btn.classList.add('copied');
+            setTimeout(function() {
+                btn.querySelector('.btn-icon').textContent = '📋';
+                btn.querySelector('.btn-text').textContent = '複製全部代號';
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+
+        function fallbackCopy(text) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+    </script>
 </body>
 </html>
 """
