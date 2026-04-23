@@ -101,6 +101,13 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[9] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
+        <a href="/strategy/12" class="card">
+            <div class="card-icon">📊</div>
+            <div class="card-title">處置股來到月線</div>
+            <div class="card-desc">兩個月內曾被處置的股票，股價在20日均線上下3%以內</div>
+            <div class="card-count">{{ counts[11] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
     </div>
 
     <div class="section-title">🏪 興櫃專區</div>
@@ -723,7 +730,63 @@ def get_all_data():
         print(f"興櫃突破平台錯誤: {e}")
         s11 = []
 
-    return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11
+
+    # 策略十二：處置股來到月線（兩個月內被處置，股價在20日均線上下3%）
+    s12 = []
+    try:
+        disposal_url12 = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
+        disposal_res12 = requests.get(disposal_url12, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
+        disposal_raw12 = disposal_res12.json()
+
+        disposal_stocks12 = {}
+        if disposal_raw12.get("stat") == "OK":
+            for row in disposal_raw12.get("data", []):
+                try:
+                    stock_id   = row[2].strip()
+                    stock_name = row[3].strip()
+                    period     = row[5].strip() if len(row) > 5 else ""
+                    disposal_stocks12[stock_id] = {"name": stock_name, "period": period}
+                except:
+                    continue
+
+        for stock_id, info in disposal_stocks12.items():
+            try:
+                if stock_id not in close_3m.columns:
+                    continue
+                prices = close_3m[stock_id].dropna()
+                if len(prices) < 20:
+                    continue
+
+                ma20 = prices.rolling(20).mean()
+                current_price = prices.iloc[-1]
+                current_ma20  = ma20.iloc[-1]
+
+                if pd.isna(current_ma20) or current_ma20 <= 0:
+                    continue
+
+                diff_pct = (current_price - current_ma20) / current_ma20
+
+                # 在月線上下3%以內
+                if abs(diff_pct) <= 0.03:
+                    s12.append({
+                        "股票代號": stock_id,
+                        "股票名稱": info["name"],
+                        "處置期間": info["period"],
+                        "目前股價": round(current_price, 2),
+                        "20日均線": round(current_ma20, 2),
+                        "偏離幅度": f"{diff_pct*100:.1f}%",
+                    })
+            except:
+                continue
+
+        s12.sort(key=lambda x: abs(float(x["偏離幅度"].replace("%", ""))))
+
+    except Exception as e:
+        print(f"處置股月線錯誤: {e}")
+        s12 = []
+
+    return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12
+
 
 
 
@@ -741,13 +804,13 @@ def get_cached_data():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9), len(s10), len(s11)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9), len(s10), len(s11), len(s12)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
@@ -773,6 +836,8 @@ def strategy(sid):
             "stocks": s10, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "5日前股價", "5日跌幅", "最近下跌日"]},
         11: {"title": "興櫃突破平台", "icon": "🚀", "desc": "今天漲幅≥10%、突破前兩天高點、前30天盤整區間≤5%，依漲幅排序",
             "stocks": s11, "columns": ["股票代號", "股票名稱", "今日收盤", "今日漲幅", "前兩天最高", "30日高點", "30日低點", "平台區間"]},
+        12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下3%以內，偏離最小的在前",
+            "stocks": s12, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "20日均線", "偏離幅度"]},
     }
 
     if sid not in strategies:
