@@ -1,0 +1,5 @@
+finlab
+flask
+pandas
+gunicorn
+requests
