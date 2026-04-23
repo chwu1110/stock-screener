@@ -105,7 +105,7 @@ HOME_TEMPLATE = """
         <a href="/strategy/12" class="card">
             <div class="card-icon">📊</div>
             <div class="card-title">處置股來到月線</div>
-            <div class="card-desc">兩個月內曾被處置的股票，股價在20日均線上下3%以內</div>
+            <div class="card-desc">兩個月內曾被處置的股票，股價在20日均線上下6%以內</div>
             <div class="card-count">{{ counts[11] }}</div>
             <div class="card-count-label">符合股票數</div>
             <div style="margin-top:10px;font-size:12px;color:#38bdf8;">🔴 <a href="/strategy/12/realtime" style="color:#38bdf8;">即時版（盤中）</a></div>
@@ -258,7 +258,7 @@ REALTIME_TEMPLATE = """
 <body>
     <a href="/" class="back">← 返回首頁</a>
     <h1>📊 處置股來到月線</h1>
-    <p class="subtitle">兩個月內曾被處置的股票，即時股價在20日均線上下3%以內，偏離最小的在前</p>
+    <p class="subtitle">兩個月內曾被處置的股票，即時股價在20日均線上下6%以內，偏離最小的在前</p>
     <div class="badge">🔴 即時模式｜每5分鐘自動更新</div><br>
 
     <div class="stat-box">
@@ -1006,7 +1006,7 @@ def get_all_data():
 
                 diff_pct = (current_price - current_ma20) / current_ma20
 
-                if abs(diff_pct) <= 0.03:
+                if abs(diff_pct) <= 0.06:
                     s12.append({
                         "股票代號": stock_id,
                         "股票名稱": info["name"],
@@ -1081,7 +1081,7 @@ def strategy12_realtime():
 
             diff_pct = (current_price - ma20) / ma20
 
-            if abs(diff_pct) <= 0.03:
+            if abs(diff_pct) <= 0.06:
                 s12_rt.append({
                     "股票代號": stock_id,
                     "股票名稱": info.get("name", ""),
@@ -1133,7 +1133,7 @@ def strategy(sid):
             "stocks": s10, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "5日前股價", "5日跌幅", "最近下跌日"]},
         11: {"title": "興櫃突破平台", "icon": "🚀", "desc": "今天漲幅≥10%、突破前兩天高點、前30天盤整區間≤5%，依漲幅排序",
             "stocks": s11, "columns": ["股票代號", "股票名稱", "今日收盤", "今日漲幅", "前兩天最高", "30日高點", "30日低點", "平台區間"]},
-        12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下3%以內，偏離最小的在前",
+        12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下6%以內，偏離最小的在前",
             "stocks": s12, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "20日均線", "偏離幅度"]},
     }
 
