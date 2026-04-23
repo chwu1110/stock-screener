@@ -103,6 +103,13 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[8] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
+        <a href="/strategy/10" class="card">
+            <div class="card-icon">🔻</div>
+            <div class="card-title">處置股拉回</div>
+            <div class="card-desc">兩個月內曾被處置的股票，連續下跌5天</div>
+            <div class="card-count">{{ counts[9] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
     </div>
 
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
@@ -550,7 +557,72 @@ def get_all_data():
         print(f"興櫃拉回錯誤: {e9}")
         s9 = []
 
-    return s1, s2, s3, s4, s5, s6, s7, s8, s9
+
+    # 策略十：處置股拉回（兩個月內被處置，且連續下跌5天）
+    s10 = []
+    try:
+        # 抓取近兩個月的處置股（包含已結束的）
+        disposal_url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
+        disposal_res = requests.get(disposal_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
+        disposal_raw = disposal_res.json()
+
+        disposal_stocks = {}
+        if disposal_raw.get("stat") == "OK":
+            for row in disposal_raw.get("data", []):
+                try:
+                    stock_id   = row[2].strip()
+                    stock_name = row[3].strip()
+                    period     = row[5].strip() if len(row) > 5 else ""
+                    disposal_stocks[stock_id] = {"name": stock_name, "period": period}
+                except:
+                    continue
+
+        # 計算連續下跌天數
+        two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
+        close_2m = close_df[close_df.index >= pd.to_datetime(two_months_ago)]
+
+        for stock_id, info in disposal_stocks.items():
+            try:
+                if stock_id not in close_2m.columns:
+                    continue
+                prices = close_2m[stock_id].dropna()
+                if len(prices) < 6:
+                    continue
+
+                # 計算每日漲跌
+                daily_chg = prices.diff()
+
+                # 檢查最近5天是否連續下跌
+                last5 = daily_chg.iloc[-5:]
+                if len(last5) < 5:
+                    continue
+
+                if all(last5 < 0):
+                    # 連續下跌5天
+                    current_price = prices.iloc[-1]
+                    price_5d_ago  = prices.iloc[-6]
+                    drop_pct      = (current_price - price_5d_ago) / price_5d_ago
+
+                    s10.append({
+                        "股票代號": stock_id,
+                        "股票名稱": info["name"],
+                        "處置期間": info["period"],
+                        "目前股價": round(current_price, 2),
+                        "5日前股價": round(price_5d_ago, 2),
+                        "5日跌幅": f"{drop_pct*100:.1f}%",
+                        "最近下跌日": str(prices.index[-1])[:10],
+                    })
+            except:
+                continue
+
+        s10.sort(key=lambda x: float(x["5日跌幅"].replace("%", "")))
+
+    except Exception as e:
+        print(f"處置股拉回錯誤: {e}")
+        s10 = []
+
+    return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10
+
 
 
 
@@ -566,13 +638,13 @@ def get_cached_data():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6, s7, s8, s9 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9), len(s10)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6, s7, s8, s9 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
@@ -594,6 +666,8 @@ def strategy(sid):
             "stocks": s8, "columns": ["股票代號", "股票名稱", "收盤價", "前日均價", "漲幅", "成交張數", "5日均量(張)", "爆量倍數"]},
         9: {"title": "興櫃當天拉回", "icon": "📉", "desc": "興櫃股票當天從最高點拉回幅度≥25%，拉回最多的在前",
             "stocks": s9, "columns": ["股票代號", "股票名稱", "今日最高", "現價", "前日均價", "拉回幅度", "漲跌幅"]},
+        10: {"title": "處置股拉回", "icon": "🔻", "desc": "兩個月內曾被處置的股票，連續下跌5天，跌最多的在前",
+            "stocks": s10, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "5日前股價", "5日跌幅", "最近下跌日"]},
     }
 
     if sid not in strategies:
