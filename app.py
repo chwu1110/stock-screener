@@ -297,6 +297,12 @@ DETAIL_TEMPLATE = """
             document.execCommand('copy');
             document.body.removeChild(ta);
         }
+
+        document.querySelectorAll('td').forEach(function(td) {
+            if (td.textContent.includes('★')) {
+                td.innerHTML = td.innerHTML.replace(/★/g, '<span style="color:#ff4444">★</span>');
+            }
+        });
     </script>
 </body>
 </html>
