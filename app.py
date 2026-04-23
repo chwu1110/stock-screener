@@ -33,12 +33,17 @@ HOME_TEMPLATE = """
         .card-count { font-size: 28px; font-weight: bold; color: #38bdf8; }
         .card-count-label { font-size: 12px; color: #64748b; margin-top: 2px; }
         .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 40px; }
+        .section-title { width: 100%; text-align: center; font-size: 18px; font-weight: bold; color: #94a3b8; margin: 30px 0 10px 0; letter-spacing: 2px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+        .card-emerging { border-color: #1e4a6e; }
+        .card-emerging:hover { border-color: #38bdf8; box-shadow: 0 8px 30px rgba(56,189,248,0.2); }
+        .card-emerging .card-count { color: #f59e0b; }
     </style>
 </head>
 <body>
     <h1>📊 台股選股平台</h1>
     <p class="subtitle">更新時間：{{ update_time }}｜點擊策略卡片查看詳細結果</p>
 
+    <div class="section-title">📈 上市櫃策略</div>
     <div class="grid">
         <a href="/strategy/1" class="card">
             <div class="card-icon">🔥</div>
@@ -89,20 +94,6 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[6] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
-        <a href="/strategy/8" class="card">
-            <div class="card-icon">🚀</div>
-            <div class="card-title">興櫃爆量強漲</div>
-            <div class="card-desc">興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%</div>
-            <div class="card-count">{{ counts[7] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
-        <a href="/strategy/9" class="card">
-            <div class="card-icon">📉</div>
-            <div class="card-title">興櫃當天拉回</div>
-            <div class="card-desc">興櫃股票當天從最高點拉回幅度≥25%</div>
-            <div class="card-count">{{ counts[8] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
         <a href="/strategy/10" class="card">
             <div class="card-icon">🔻</div>
             <div class="card-title">處置股拉回</div>
@@ -110,8 +101,26 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[9] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
-        <a href="/strategy/11" class="card">
+    </div>
+
+    <div class="section-title">🏪 興櫃專區</div>
+    <div class="grid">
+        <a href="/strategy/8" class="card card-emerging">
             <div class="card-icon">🚀</div>
+            <div class="card-title">興櫃爆量強漲</div>
+            <div class="card-desc">興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%</div>
+            <div class="card-count">{{ counts[7] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
+        <a href="/strategy/9" class="card card-emerging">
+            <div class="card-icon">📉</div>
+            <div class="card-title">興櫃當天拉回</div>
+            <div class="card-desc">興櫃股票當天從最高點拉回幅度≥25%</div>
+            <div class="card-count">{{ counts[8] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
+        <a href="/strategy/11" class="card card-emerging">
+            <div class="card-icon">💥</div>
             <div class="card-title">興櫃突破平台</div>
             <div class="card-desc">今天漲幅≥10%、突破前兩天高點、前30天盤整區間≤5%</div>
             <div class="card-count">{{ counts[10] }}</div>
