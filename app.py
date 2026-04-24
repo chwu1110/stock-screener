@@ -43,6 +43,7 @@ HOME_TEMPLATE = """
 <body>
     <h1>📊 台股選股平台</h1>
     <p class="subtitle">更新時間：{{ update_time }}｜點擊策略卡片查看詳細結果</p>
+    <a href="/monitor" style="display:inline-block;margin-bottom:20px;padding:10px 24px;background:#1e3a5f;color:#38bdf8;border-radius:8px;text-decoration:none;font-size:14px;font-weight:bold;border:1px solid #38bdf844;">📡 即時監控總覽（整合所有策略）</a>
 
     <div class="section-title">📈 上市櫃策略</div>
     <div class="grid">
@@ -1015,6 +1016,18 @@ def get_all_data():
         print(f"處置股月線錯誤: {e}")
         s12 = []
 
+    # 存進全域供監控頁面使用
+    global _global_s1, _global_s2, _global_s3, _global_s4, _global_s5, _global_s6, _global_s7, _global_s10, _global_s12
+    _global_s1  = s1
+    _global_s2  = s2
+    _global_s3  = s3
+    _global_s4  = s4
+    _global_s5  = s5
+    _global_s6  = s6
+    _global_s7  = s7
+    _global_s10 = s10
+    _global_s12 = s12
+
     return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12
 
 
@@ -1027,6 +1040,112 @@ _cache = {"data": None, "time": None}
 _global_disposal_2m = {}
 _global_close_3m = None
 _global_industry_dict = {}
+_global_s1 = []
+_global_s2 = []
+_global_s3 = []
+_global_s4 = []
+_global_s5 = []
+_global_s6 = []
+_global_s7 = []
+_global_s10 = []
+_global_s12 = []
+
+MONITOR_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📡 即時監控總覽</title>
+    <meta http-equiv="refresh" content="300">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
+        .back { display: inline-block; margin-bottom: 16px; color: #38bdf8; text-decoration: none; font-size: 14px; }
+        h1 { font-size: 22px; margin-bottom: 4px; }
+        .subtitle { color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
+        .section { margin-bottom: 32px; }
+        .section-title { font-size: 15px; font-weight: bold; color: #f8fafc; margin-bottom: 10px; padding: 6px 12px; background: #1e293b; border-left: 3px solid #38bdf8; border-radius: 4px; }
+        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; font-size: 13px; }
+        thead tr { background: #0f172a; }
+        th { padding: 10px 14px; text-align: left; color: #94a3b8; font-weight: 600; white-space: nowrap; }
+        td { padding: 9px 14px; border-top: 1px solid #334155; white-space: nowrap; }
+        tr:hover td { background: #263548; }
+        .sid { color: #38bdf8; font-weight: bold; }
+        .up { color: #4ade80; font-weight: bold; }
+        .dn { color: #f87171; font-weight: bold; }
+        .flat { color: #94a3b8; }
+        .empty { color: #475569; padding: 16px; text-align: center; }
+        .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 20px; }
+        .countdown { text-align: center; color: #64748b; font-size: 12px; margin-top: 4px; }
+        .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px; margin-left: 4px; }
+        .tag-s1 { background:#7c3aed22; color:#a78bfa; border:1px solid #7c3aed44; }
+        .tag-s2 { background:#0369a122; color:#38bdf8; border:1px solid #0369a144; }
+        .tag-s3 { background:#dc262622; color:#f87171; border:1px solid #dc262644; }
+        .tag-s4 { background:#92400e22; color:#fbbf24; border:1px solid #92400e44; }
+        .tag-s5 { background:#16543022; color:#34d399; border:1px solid #16543044; }
+        .tag-s6 { background:#be185d22; color:#f472b6; border:1px solid #be185d44; }
+        .tag-s7 { background:#1e3a5f22; color:#93c5fd; border:1px solid #1e3a5f44; }
+        .tag-s10 { background:#78350f22; color:#fcd34d; border:1px solid #78350f44; }
+        .tag-s12 { background:#14532d22; color:#86efac; border:1px solid #14532d44; }
+    </style>
+    <script>
+        let secs = 300;
+        setInterval(() => {
+            secs--;
+            const el = document.getElementById('cd');
+            if (el) el.textContent = secs + ' 秒後自動刷新';
+            if (secs <= 0) location.reload();
+        }, 1000);
+    </script>
+</head>
+<body>
+    <a href="/" class="back">← 返回首頁</a>
+    <h1>📡 即時監控總覽</h1>
+    <p class="subtitle">整合所有策略股票的即時行情｜每5分鐘自動刷新｜更新時間：{{ update_time }}</p>
+
+    {% if stocks %}
+    <table>
+        <thead>
+            <tr>
+                <th>策略來源</th>
+                <th>股票代號</th>
+                <th>股票名稱</th>
+                <th>產業別</th>
+                <th>昨收</th>
+                <th>即時股價</th>
+                <th>漲跌幅</th>
+                <th>今日最高</th>
+                <th>今日最低</th>
+                <th>資料時間</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in stocks %}
+            <tr>
+                <td>{% for tag in s['策略來源'] %}<span class="tag tag-{{ tag.cls }}">{{ tag.name }}</span>{% endfor %}</td>
+                <td class="sid">{{ s['股票代號'] }}</td>
+                <td>{{ s['股票名稱'] }}</td>
+                <td>{{ s['產業別'] }}</td>
+                <td>{{ s['昨收'] }}</td>
+                <td class="{{ 'up' if s['漲跌幅'][0] != '-' else 'dn' }}">{{ s['即時股價'] }}</td>
+                <td class="{{ 'up' if s['漲跌幅'][0] != '-' else ('dn' if s['漲跌幅'][0] == '-' else 'flat') }}">{{ s['漲跌幅'] }}</td>
+                <td class="up">{{ s['今日最高'] }}</td>
+                <td class="dn">{{ s['今日最低'] }}</td>
+                <td>{{ s['資料時間'] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty">❌ 目前沒有監控股票，或即時資料尚未載入</div>
+    {% endif %}
+
+    <p class="updated">即時股價來源：證交所／櫃買｜策略資料來源：FinLab</p>
+    <p class="countdown" id="cd">300 秒後自動刷新</p>
+</body>
+</html>
+"""
 
 def get_cached_data():
     now = datetime.now()
@@ -1091,6 +1210,110 @@ def strategy12_realtime():
         print(f"即時策略12錯誤: {e}")
 
     return render_template_string(REALTIME_TEMPLATE, stocks=s12_rt, update_time=update_time)
+
+@app.route("/monitor")
+def monitor():
+    """即時監控總覽 - 整合所有策略股票"""
+    get_cached_data()
+    update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 收集所有策略的股票，去重並記錄來源
+    strategy_tags = [
+        ("s1",  _global_s1,  "二手紅盤",   "股票代號"),
+        ("s2",  _global_s2,  "跌停翻漲停", "股票代號"),
+        ("s3",  _global_s3,  "強勢回檔",   "股票代號"),
+        ("s4",  _global_s4,  "三手紅盤",   "股票代號"),
+        ("s5",  _global_s5,  "四手紅盤",   "股票代號"),
+        ("s6",  _global_s6,  "五手紅盤",   "股票代號"),
+        ("s7",  _global_s7,  "處置跌破線", "股票代號"),
+        ("s10", _global_s10, "處置拉回",   "股票代號"),
+        ("s12", _global_s12, "處置月線",   "股票代號"),
+    ]
+
+    # 整合：同一支股票合併策略標籤
+    stock_map = {}  # {stock_id: {name, tags, prev_close}}
+    for cls, slist, label, key in strategy_tags:
+        seen = set()
+        for item in slist:
+            sid = item.get(key, "")
+            if not sid or sid in seen:
+                continue
+            seen.add(sid)
+            # 取昨收（各策略欄位名不同，依序找）
+            prev = (item.get("第二天收盤") or item.get("收盤價") or
+                    item.get("目前股價") or item.get("第五天收盤") or
+                    item.get("第四天收盤") or item.get("第三天收盤") or 0)
+            if sid not in stock_map:
+                stock_map[sid] = {
+                    "股票名稱": item.get("股票名稱", ""),
+                    "昨收": prev,
+                    "tags": []
+                }
+            stock_map[sid]["tags"].append({"cls": cls, "name": label})
+
+    if not stock_map:
+        return render_template_string(MONITOR_TEMPLATE, stocks=[], update_time=update_time)
+
+    # 抓即時股價
+    all_ids = list(stock_map.keys())
+    realtime = get_realtime_prices(all_ids)
+
+    # 也抓今日最高最低（用 getStockInfo 的 h/l 欄位）
+    high_low = {}
+    now_dt = datetime.now()
+    is_trading = (now_dt.weekday() < 5 and
+                  (9 <= now_dt.hour < 13 or (now_dt.hour == 13 and now_dt.minute <= 30)))
+    if is_trading:
+        for batch in [all_ids[i:i+50] for i in range(0, len(all_ids), 50)]:
+            for prefix in ["tse_", "otc_"]:
+                try:
+                    ids_str = "|".join([f"{prefix}{sid}.tw" for sid in batch])
+                    url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
+                    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                    for item in resp.json().get("msgArray", []):
+                        sid = item.get("c", "")
+                        h = item.get("h", "-")
+                        l = item.get("l", "-")
+                        y = item.get("y", "-")  # 昨收
+                        if sid and h != "-" and l != "-":
+                            high_low[sid] = {
+                                "high": float(h),
+                                "low": float(l),
+                                "prev": float(y) if y != "-" else 0,
+                            }
+                except:
+                    pass
+
+    # 組合結果
+    result = []
+    for sid, info in stock_map.items():
+        rt = realtime.get(sid, {})
+        hl = high_low.get(sid, {})
+        price = rt.get("price", 0)
+        prev = hl.get("prev") or info["昨收"] or 0
+        change_pct = f"{(price - prev)/prev*100:+.1f}%" if price and prev else "-"
+        result.append({
+            "策略來源": info["tags"],
+            "股票代號": sid,
+            "股票名稱": info["股票名稱"],
+            "產業別": _global_industry_dict.get(sid, ""),
+            "昨收": prev if prev else "-",
+            "即時股價": price if price else "-",
+            "漲跌幅": change_pct,
+            "今日最高": hl.get("high", "-"),
+            "今日最低": hl.get("low", "-"),
+            "資料時間": rt.get("time", "盤後"),
+        })
+
+    # 依漲跌幅排序（漲最多在前）
+    def sort_key(x):
+        try:
+            return -float(x["漲跌幅"].replace("%","").replace("+",""))
+        except:
+            return 0
+    result.sort(key=sort_key)
+
+    return render_template_string(MONITOR_TEMPLATE, stocks=result, update_time=update_time)
 
 @app.route("/")
 def home():
