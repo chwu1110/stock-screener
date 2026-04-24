@@ -425,7 +425,7 @@ def get_ma20_cache(disposal_stocks_2m, close_3m):
 
 
 def get_all_data():
-    finlab.login(FINLAB_API_KEY)
+    finlab.login(api_token=FINLAB_API_KEY)
 
     today = datetime.today()
     start_2026 = "2026-01-01"
