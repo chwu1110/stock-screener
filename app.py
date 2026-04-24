@@ -369,6 +369,7 @@ def get_realtime_prices(stock_ids):
     prices = {}
     batch_size = 50
     now_str = now.strftime("%H:%M")
+    twse_ids = [f"tse_{sid}.tw" for sid in stock_ids]
 
     for batch in [twse_ids[i:i+batch_size] for i in range(0, len(twse_ids), batch_size)]:
         try:
@@ -405,7 +406,7 @@ def get_realtime_prices(stock_ids):
             pass
 
     _realtime_cache["prices"] = prices
-    _realtime_cache["time"] = now
+    _realtime_cache["time"] = now_naive
     print(f"即時股價: 抓到 {len(prices)}/{len(stock_ids)} 檔")
     return prices
 
