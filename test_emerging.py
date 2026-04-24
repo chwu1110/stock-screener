@@ -1,94 +1,83 @@
-import requests
-import pandas as pd
-from datetime import datetime, timedelta
+"""
+測試興櫃即時報價 - 印出所有回應
+市場代碼：4 = 興櫃（TWEMERGING）
+"""
+import sys
+import time
+from pathlib import Path
 
-def get_emerging_prices():
-    """抓取近一個月興櫃每日收盤價"""
-    all_data = {}
+DLL_DIR  = r"C:\Users\chaow\Downloads\Compressed\YuantaOneAPI_Python\YuantaOneAPI_Python"
+ACCOUNT  = "A123363332"
+PASSWORD = "Alex0722$$"
+
+sys.path.append(DLL_DIR)
+sys.path.append(str(Path(DLL_DIR).parent))
+
+import clr
+clr.AddReference('System.Collections')
+clr.AddReference('YuantaOneAPI')
+
+from YuantaOneAPI import (
+    YuantaOneAPITrader, enumEnvironmentMode,
+    OnResponseEventHandler, YuantaDataHelper,
+    enumLangType, enumLogType, WatchlistAll
+)
+from System.Collections.Generic import List
+
+count = [0]
+
+def on_response(intMark, dwIndex, strIndex, objHandle, objValue):
+    count[0] += 1
+    # 印出所有回應
+    print(f"[回應{count[0]}] intMark={intMark} strIndex='{strIndex}'")
     
-    end_date = datetime.today()
-    start_date = end_date - timedelta(days=30)
-    
-    current = start_date
-    while current <= end_date:
-        # 跳過週末
-        if current.weekday() >= 5:
-            current += timedelta(days=1)
-            continue
-        
-        date_str = current.strftime("%Y/%m/%d")
-        
+    # 如果是報價回應，嘗試解析
+    if intMark == 2:
         try:
-            url = "https://www.tpex.org.tw/web/emergingstock/single_all/emergingstk_all.php"
-            params = {
-                "l": "zh-tw",
-                "d": date_str,
-                "se": "EW"
-            }
-            headers = {"User-Agent": "Mozilla/5.0"}
-            res = requests.get(url, params=params, headers=headers, timeout=10)
-            data = res.json()
+            h = YuantaDataHelper(enumLangType.NORMAL)
+            h.OutMsgLoad(objValue)
+            key    = h.GetStr(22).strip()
+            market = h.GetByte()
+            sid    = h.GetStr(12).strip()
+            seq    = h.GetLong()
+            flag   = h.GetByte()
+            print(f"  → 市場={market} 股票={sid} 旗標={flag}")
             
-            if "aaData" in data and data["aaData"]:
-                for row in data["aaData"]:
-                    stock_id = row[0].strip()
-                    stock_name = row[1].strip()
-                    try:
-                        close_price = float(row[4].replace(",", ""))
-                    except:
-                        continue
-                    
-                    if stock_id not in all_data:
-                        all_data[stock_id] = {"name": stock_name, "prices": {}}
-                    all_data[stock_id]["prices"][current.strftime("%Y-%m-%d")] = close_price
-                    
-            print(f"✅ {date_str} 抓到 {len(data.get('aaData', []))} 支")
+            if flag == 29:  # 成交
+                t = h.GetTYuantaTime()
+                h.GetInt()  # out
+                h.GetInt()  # in
+                price = h.GetInt() / 10000.0
+                vol   = h.GetInt()
+                total = h.GetInt()
+                print(f"  → 成交價={price} 量={vol} 總量={total}")
         except Exception as e:
-            print(f"❌ {date_str} 失敗: {e}")
-        
-        current += timedelta(days=1)
-    
-    return all_data
+            print(f"  → 解析錯誤: {e}")
 
-if __name__ == "__main__":
-    print("開始抓取興櫃資料...")
-    data = get_emerging_prices()
-    print(f"\n共抓到 {len(data)} 支興櫃股票")
-    
-    # 找出符合條件：任意一天收盤比兩天前收盤高30%
-    result = []
-    for stock_id, info in data.items():
-        prices = sorted(info["prices"].items())
-        if len(prices) < 3:
-            continue
-        
-        best_gain = 0
-        best_d1 = best_d3 = ""
-        best_p1 = best_p3 = 0
-        
-        for i in range(2, len(prices)):
-            d1, p1 = prices[i-2]
-            d3, p3 = prices[i]
-            if p1 <= 0:
-                continue
-            gain = (p3 / p1) - 1
-            if gain > best_gain:
-                best_gain = gain
-                best_d1, best_p1 = d1, p1
-                best_d3, best_p3 = d3, p3
-        
-        if best_gain >= 0.30:
-            result.append({
-                "股票代號": stock_id,
-                "股票名稱": info["name"],
-                "起始日": best_d1,
-                "結束日": best_d3,
-                "起始收盤": best_p1,
-                "結束收盤": best_p3,
-                "漲幅": f"{best_gain*100:.1f}%"
-            })
-    
-    result.sort(key=lambda x: x["結束日"], reverse=True)
-    print(f"\n符合條件（3天內漲30%）的興櫃股票：{len(result)} 支")
-    for r in result:
-        print(r)
+api = YuantaOneAPITrader()
+api.OnResponse += OnResponseEventHandler(on_response)
+api.SetLogType(enumLogType.COMMON)
+
+print("連線中...")
+api.Open(enumEnvironmentMode.PROD)
+time.sleep(3)
+
+print(f"登入 {ACCOUNT}...")
+api.Login(ACCOUNT, PASSWORD)
+time.sleep(4)
+
+# 訂閱興櫃股票（市場代碼=4）
+# 用幾個今天成交量大的興櫃股
+stocks = ["4738", "6434", "6407", "5271", "3585", "4582"]
+lst = List[WatchlistAll]()
+for sid in stocks:
+    w = WatchlistAll()
+    w.MarketNo  = 4   # 興櫃
+    w.StockCode = sid
+    lst.Add(w)
+
+api.SubscribeWatchlistAll(lst)
+print(f"已訂閱 {len(stocks)} 檔興櫃股票，等待報價 60 秒...")
+
+time.sleep(60)
+print(f"\n總共收到 {count[0]} 則回應")
