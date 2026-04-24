@@ -11,7 +11,7 @@ from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
-FINLAB_API_KEY = os.environ.get("FINLAB_API_KEY", "")
+FINLAB_API_KEY = "LBmwu3n0/lor77y1Z0aBH/Q0WBI6+bLJrA2TlchZAM1jb6jJaURRbaQRZRWjozwP#vip_m"
 
 HOME_TEMPLATE = """
 <!DOCTYPE html>
