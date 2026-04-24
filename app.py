@@ -118,32 +118,6 @@ HOME_TEMPLATE = """
             <div class="card-count-label">符合股票數</div>
         </a>
     </div>
-
-    <div class="section-title">🏪 興櫃專區</div>
-    <div class="grid">
-        <a href="/strategy/8" class="card card-emerging">
-            <div class="card-icon">🚀</div>
-            <div class="card-title">興櫃爆量強漲</div>
-            <div class="card-desc">興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%</div>
-            <div class="card-count">{{ counts[7] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
-        <a href="/strategy/9" class="card card-emerging">
-            <div class="card-icon">📉</div>
-            <div class="card-title">興櫃當天拉回</div>
-            <div class="card-desc">興櫃股票當天從最高點拉回幅度≥25%</div>
-            <div class="card-count">{{ counts[8] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
-        <a href="/strategy/11" class="card card-emerging">
-            <div class="card-icon">💥</div>
-            <div class="card-title">興櫃突破平台</div>
-            <div class="card-desc">今天漲幅≥10%、突破前兩天高點、前30天盤整區間≤5%</div>
-            <div class="card-count">{{ counts[10] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
-    </div>
-
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
 </body>
 </html>
@@ -860,107 +834,10 @@ def get_all_data():
         s7 = []
 
 
-    # 策略八：興櫃爆量強漲（用公開API抓今日資料）
+
+
     s8 = []
-    try:
-        def _esb_float(val):
-            s = str(val).replace(",", "").strip()
-            return float(s) if s and s not in ["-", "--", ""] else 0.0
-
-        # 抓今日即時資料
-        esb_url = "https://www.tpex.org.tw/openapi/v1/tpex_esb_latest_statistics"
-        esb_h = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-        r8 = requests.get(esb_url, headers=esb_h, timeout=15, verify=False)
-        esb_today = {}
-        for item in r8.json():
-            sid = str(item.get("SecuritiesCompanyCode","")).strip()
-            if not sid or not sid.isdigit(): continue
-            prev = _esb_float(item.get("PreviousAveragePrice",0))
-            latest = _esb_float(item.get("LatestPrice",0))
-            high = _esb_float(item.get("Highest",0))
-            vol = _esb_float(item.get("TransactionVolume",0))
-            name8 = str(item.get("CompanyName","")).strip()
-            change = (latest - prev) / prev if prev > 0 and latest > 0 else 0.0
-            esb_today[sid] = {"name":name8,"latest":latest,"prev":prev,"vol":vol,"change":change,"high":high}
-
-        # 抓近期歷史成交量（用月資料算5日均量）
-        avg5_dict = {}
-        today_dt = datetime.now()
-        for delta in [0, -1]:
-            m = today_dt.month + delta
-            y = today_dt.year
-            if m <= 0: m += 12; y -= 1
-            hist_url = f"https://www.tpex.org.tw/openapi/v1/tpex_esb_every_day_statistics?date={y}{m:02d}"
-            hr8 = requests.get(hist_url, headers=esb_h, timeout=15, verify=False)
-            if hr8.status_code != 200: continue
-            try:
-                hdata = hr8.json()
-                if not isinstance(hdata, list): continue
-                for row in hdata:
-                    sid = str(row.get("SecuritiesCompanyCode","")).strip()
-                    vol = _esb_float(row.get("TransactionVolume",0))
-                    if sid and sid.isdigit():
-                        avg5_dict.setdefault(sid,[]).append(vol / 1000)  # 轉換為張
-            except: continue
-
-        for sid, info in esb_today.items():
-            vol_k = info["vol"] / 1000  # 轉換為張
-            change = info["change"]
-            vols = avg5_dict.get(sid, [])
-            avg5 = sum(vols[-5:]) / len(vols[-5:]) if vols else 0
-
-            # 爆量條件：成交>=500張、漲幅>=30%
-            # 若有均量資料則額外判斷>=10倍均量
-            vol_ok = vol_k >= 500
-            change_ok = change >= 0.30
-            ratio_ok = (avg5 <= 0) or (vol_k >= avg5 * 10)
-
-            if vol_ok and change_ok and ratio_ok:
-                ratio_str = f"{vol_k/avg5:.1f}x" if avg5 > 0 else "-"
-                avg5_str = f"{int(avg5):,}" if avg5 > 0 else "-"
-                s8.append({
-                    "股票代號": sid,
-                    "股票名稱": info["name"],
-                    "收盤價": info["latest"],
-                    "前日均價": info["prev"],
-                    "漲幅": f"{change*100:.1f}%",
-                    "成交張數": f"{int(vol_k):,}",
-                    "5日均量(張)": avg5_str,
-                    "爆量倍數": ratio_str,
-                })
-
-        s8.sort(key=lambda x: float(x["漲幅"].replace("%","")), reverse=True)
-    except Exception as e8:
-        print(f"興櫃爆量錯誤: {e8}")
-        s8 = []
-
-
-    # 策略九：興櫃當天拉回（用公開API抓今日資料）
     s9 = []
-    try:
-        # 重用策略八的今日資料
-        for sid, info in esb_today.items():
-            high = info["high"]
-            latest = info["latest"]
-            prev = info["prev"]
-            if high > 0 and latest > 0:
-                pullback = (high - latest) / high
-                if pullback >= 0.25:
-                    change = info["change"]
-                    s9.append({
-                        "股票代號": sid,
-                        "股票名稱": info["name"],
-                        "今日最高": high,
-                        "現價": latest,
-                        "前日均價": prev,
-                        "拉回幅度": f"{pullback*100:.1f}%",
-                        "漲跌幅": f"{change*100:.1f}%",
-                    })
-        s9.sort(key=lambda x: float(x["拉回幅度"].replace("%","")), reverse=True)
-    except Exception as e9:
-        print(f"興櫃拉回錯誤: {e9}")
-        s9 = []
-
 
     # 策略十：處置股拉回（兩個月內被處置，且連續下跌5天）
     s10 = []
@@ -1012,91 +889,8 @@ def get_all_data():
         s10 = []
 
 
-    # 策略十一：興櫃突破平台
-    # 條件：今天漲幅≥10% + 今天股價>前兩天最高 + 前30天高低差≤5%
+
     s11 = []
-    try:
-        def _esb_f(val):
-            s = str(val).replace(",", "").strip()
-            return float(s) if s and s not in ["-", "--", ""] else 0.0
-
-        esb_url11 = "https://www.tpex.org.tw/openapi/v1/tpex_esb_latest_statistics"
-        esb_h11 = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-        r11 = requests.get(esb_url11, headers=esb_h11, timeout=15, verify=False)
-        esb_items11 = r11.json()
-
-        # 整理今日資料
-        esb_today11 = {}
-        for item in esb_items11:
-            sid = str(item.get("SecuritiesCompanyCode","")).strip()
-            if not sid or not sid.isdigit(): continue
-            prev   = _esb_f(item.get("PreviousAveragePrice", 0))
-            latest = _esb_f(item.get("LatestPrice", 0))
-            high   = _esb_f(item.get("Highest", 0))
-            name11 = str(item.get("CompanyName","")).strip()
-            change = (latest - prev) / prev if prev > 0 and latest > 0 else 0.0
-            esb_today11[sid] = {
-                "name": name11, "latest": latest,
-                "prev": prev, "high": high, "change": change
-            }
-
-        # 用 close_3m 抓興櫃歷史資料計算平台
-        start_30d = (today - timedelta(days=45)).strftime("%Y-%m-%d")
-        close_30d = close_df[close_df.index >= pd.to_datetime(start_30d)]
-
-        for sid, info in esb_today11.items():
-            try:
-                latest = info["latest"]
-                change = info["change"]
-
-                # 條件1：今天漲幅≥10%
-                if change < 0.10:
-                    continue
-
-                # 需要歷史資料
-                if sid not in close_30d.columns:
-                    continue
-
-                prices_30d = close_30d[sid].dropna()
-                if len(prices_30d) < 5:
-                    continue
-
-                # 條件2：今天股價 > 前兩天最高
-                prev2_high = prices_30d.iloc[-3:-1].max() if len(prices_30d) >= 3 else 0
-                if latest <= prev2_high:
-                    continue
-
-                # 條件3：前30天（不含今天）高低差≤5%
-                hist_prices = prices_30d.iloc[:-1]  # 不含今天
-                if len(hist_prices) < 5:
-                    continue
-                p_max = hist_prices.max()
-                p_min = hist_prices.min()
-                if p_min <= 0:
-                    continue
-                range_pct = (p_max - p_min) / p_min
-                if range_pct > 0.05:
-                    continue
-
-                s11.append({
-                    "股票代號": sid,
-                    "股票名稱": info["name"],
-                    "今日收盤": latest,
-                    "今日漲幅": f"{change*100:.1f}%",
-                    "前兩天最高": round(prev2_high, 2),
-                    "30日高點": round(p_max, 2),
-                    "30日低點": round(p_min, 2),
-                    "平台區間": f"{range_pct*100:.1f}%",
-                })
-            except:
-                continue
-
-        s11.sort(key=lambda x: float(x["今日漲幅"].replace("%","")), reverse=True)
-
-    except Exception as e:
-        print(f"興櫃突破平台錯誤: {e}")
-        s11 = []
-
 
     # 策略十二：處置股來到月線（兩個月內被處置，股價在20日均線上下3%）
     s12 = []
@@ -1282,7 +1076,7 @@ def strategy12_realtime():
 def home():
     s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9), len(s10), len(s11), len(s12), len(s13)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), 0, 0, len(s10), 0, len(s12), len(s13)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
@@ -1304,14 +1098,8 @@ def strategy(sid):
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，且目前收盤價跌破10日均線，每支只列一筆，跌破幅度最大的在前",
             "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "目前收盤價", "10日均線", "跌破幅度"]},
-        8: {"title": "興櫃爆量強漲", "icon": "🚀", "desc": "興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%，依漲幅由高到低排列",
-            "stocks": s8, "columns": ["股票代號", "股票名稱", "收盤價", "前日均價", "漲幅", "成交張數", "5日均量(張)", "爆量倍數"]},
-        9: {"title": "興櫃當天拉回", "icon": "📉", "desc": "興櫃股票當天從最高點拉回幅度≥25%，拉回最多的在前",
-            "stocks": s9, "columns": ["股票代號", "股票名稱", "今日最高", "現價", "前日均價", "拉回幅度", "漲跌幅"]},
         10: {"title": "處置股拉回", "icon": "🔻", "desc": "兩個月內曾被處置的股票，連續下跌5天，跌最多的在前",
             "stocks": s10, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "5日前股價", "5日跌幅", "最近下跌日"]},
-        11: {"title": "興櫃突破平台", "icon": "🚀", "desc": "今天漲幅≥10%、突破前兩天高點、前30天盤整區間≤5%，依漲幅排序",
-            "stocks": s11, "columns": ["股票代號", "股票名稱", "今日收盤", "今日漲幅", "前兩天最高", "30日高點", "30日低點", "平台區間"]},
         12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下6%以內，偏離最小的在前",
             "stocks": s12, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "20日均線", "偏離幅度"]},
     }
