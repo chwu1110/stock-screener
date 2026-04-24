@@ -113,31 +113,6 @@ HOME_TEMPLATE = """
         </a>
     </div>
 
-    <div class="section-title">🏪 興櫃專區</div>
-    <div class="grid">
-        <a href="/strategy/8" class="card card-emerging">
-            <div class="card-icon">🚀</div>
-            <div class="card-title">興櫃爆量強漲</div>
-            <div class="card-desc">興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%</div>
-            <div class="card-count">{{ counts[7] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
-        <a href="/strategy/9" class="card card-emerging">
-            <div class="card-icon">📉</div>
-            <div class="card-title">興櫃當天拉回</div>
-            <div class="card-desc">興櫃股票當天從最高點拉回幅度≥25%</div>
-            <div class="card-count">{{ counts[8] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
-        <a href="/strategy/11" class="card card-emerging">
-            <div class="card-icon">💥</div>
-            <div class="card-title">興櫃突破平台</div>
-            <div class="card-desc">今天漲幅≥10%、突破前兩天高點、前30天盤整區間≤5%</div>
-            <div class="card-count">{{ counts[10] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
-    </div>
-
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
 </body>
 </html>
