@@ -11,7 +11,7 @@ from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
-FINLAB_API_KEY = os.environ.get("FINLAB_API_KEY", "LBmwu3n0/lor77y1Z0aBH/Q0WBI6+bLJrA2TlchZAM1jb6jJaURRbaQRZRWjozwP#vip_m")
+FINLAB_API_KEY = os.environ.get("FINLAB_API_KEY", "")
 
 HOME_TEMPLATE = """
 <!DOCTYPE html>
@@ -348,7 +348,7 @@ def get_tpex_realtime(stock_ids):
         print(f"櫃買即時API錯誤: {e}")
     return prices
 
-FUGLE_API_KEY = "YzQ4MTE5NzgtMzE2My00NGJiLWExMWItYTgxMTJkMDBjZTc4IDU4MTI2YTFjLTVjMGQtNGVhOS05OWVkLTMyMGU1NWZhNzBlNw=="
+FUGLE_API_KEY = os.environ.get("FUGLE_API_KEY", "")
 
 def get_realtime_prices(stock_ids):
     """抓所有股票的即時股價 - 使用 Fugle API"""
