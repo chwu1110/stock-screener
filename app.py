@@ -348,9 +348,10 @@ def get_tpex_realtime(stock_ids):
         print(f"櫃買即時API錯誤: {e}")
     return prices
 
+FUGLE_API_KEY = "YzQ4MTE5NzgtMzE2My00NGJiLWExMWItYTgxMTJkMDBjZTc4IDU4MTI2YTFjLTVjMGQtNGVhOS05OWVkLTMyMGU1NWZhNzBlNw=="
+
 def get_realtime_prices(stock_ids):
-    """抓所有處置股的即時股價（自動判斷上市/上櫃）"""
-    # 用台灣時間判斷交易時間
+    """抓所有股票的即時股價 - 使用 Fugle API"""
     import pytz
     tz_tw = pytz.timezone("Asia/Taipei")
     now = datetime.now(tz_tw)
@@ -367,47 +368,33 @@ def get_realtime_prices(stock_ids):
         return _realtime_cache["prices"]
 
     prices = {}
-    batch_size = 50
     now_str = now.strftime("%H:%M")
-    twse_ids = [f"tse_{sid}.tw" for sid in stock_ids]
+    headers = {"X-API-KEY": FUGLE_API_KEY}
 
-    for batch in [twse_ids[i:i+batch_size] for i in range(0, len(twse_ids), batch_size)]:
+    for sid in stock_ids:
         try:
-            ids_str = "|".join(batch)
-            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-            for item in resp.json().get("msgArray", []):
-                sid = item.get("c", "")
-                p = item.get("z", "-")
-                if p and p != "-":
-                    try:
-                        prices[sid] = {"price": float(p), "time": now_str}
-                    except:
-                        pass
-        except:
-            pass
-
-    # 沒抓到的再試上櫃
-    missing = [sid for sid in stock_ids if sid not in prices]
-    for batch in [missing[i:i+batch_size] for i in range(0, len(missing), batch_size)]:
-        try:
-            ids_str = "|".join([f"otc_{sid}.tw" for sid in batch])
-            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-            for item in resp.json().get("msgArray", []):
-                sid = item.get("c", "")
-                p = item.get("z", "-")
-                if p and p != "-":
-                    try:
-                        prices[sid] = {"price": float(p), "time": now_str}
-                    except:
-                        pass
+            url = f"https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/{sid}"
+            resp = requests.get(url, headers=headers, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                price = data.get("closePrice") or data.get("lastPrice") or data.get("referencePrice")
+                high  = data.get("highPrice", "-")
+                low   = data.get("lowPrice", "-")
+                prev  = data.get("referencePrice", 0)
+                if price:
+                    prices[sid] = {
+                        "price": float(price),
+                        "high":  float(high) if high != "-" else "-",
+                        "low":   float(low)  if low  != "-" else "-",
+                        "prev":  float(prev) if prev else 0,
+                        "time":  now_str,
+                    }
         except:
             pass
 
     _realtime_cache["prices"] = prices
     _realtime_cache["time"] = now_naive
-    print(f"即時股價: 抓到 {len(prices)}/{len(stock_ids)} 檔")
+    print(f"即時股價(Fugle): 抓到 {len(prices)}/{len(stock_ids)} 檔")
     return prices
 
 def get_ma20_cache(disposal_stocks_2m, close_3m):
@@ -1266,26 +1253,13 @@ def monitor():
     now_tw = datetime.now(tz_tw)
     is_trading = (now_tw.weekday() < 5 and
                   (9 <= now_tw.hour < 13 or (now_tw.hour == 13 and now_tw.minute <= 30)))
-    if is_trading:
-        for batch in [all_ids[i:i+50] for i in range(0, len(all_ids), 50)]:
-            for prefix in ["tse_", "otc_"]:
-                try:
-                    ids_str = "|".join([f"{prefix}{sid}.tw" for sid in batch])
-                    url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
-                    resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-                    for item in resp.json().get("msgArray", []):
-                        sid = item.get("c", "")
-                        h = item.get("h", "-")
-                        l = item.get("l", "-")
-                        y = item.get("y", "-")  # 昨收
-                        if sid and h != "-" and l != "-":
-                            high_low[sid] = {
-                                "high": float(h),
-                                "low": float(l),
-                                "prev": float(y) if y != "-" else 0,
-                            }
-                except:
-                    pass
+    # 高低點直接從 Fugle 即時資料取
+    for sid, rt in realtime.items():
+        high_low[sid] = {
+            "high": rt.get("high", "-"),
+            "low":  rt.get("low",  "-"),
+            "prev": rt.get("prev", 0),
+        }
 
     # 組合結果
     result = []
