@@ -350,7 +350,12 @@ def get_tpex_realtime(stock_ids):
 
 def get_realtime_prices(stock_ids):
     """抓所有處置股的即時股價（自動判斷上市/上櫃）"""
-    now = datetime.now()
+    # 用台灣時間判斷交易時間
+    import pytz
+    tz_tw = pytz.timezone("Asia/Taipei")
+    now = datetime.now(tz_tw)
+    now_naive = datetime.now()
+
     # 非交易時間直接回傳空
     if now.weekday() >= 5:
         return {}
@@ -358,17 +363,12 @@ def get_realtime_prices(stock_ids):
         return {}
 
     # 5分鐘快取
-    if _realtime_cache["time"] and (now - _realtime_cache["time"]).seconds < 300:
+    if _realtime_cache["time"] and (now_naive - _realtime_cache["time"]).seconds < 300:
         return _realtime_cache["prices"]
 
     prices = {}
-    # 全部先試上市，再試上櫃（同一個API，用 tse_ 或 otc_ 前綴）
-    # 分批處理（每批50檔）
-    twse_ids = [f"tse_{sid}.tw" for sid in stock_ids]
-    tpex_ids = [f"otc_{sid}.tw" for sid in stock_ids]
-
     batch_size = 50
-    now_str = datetime.now().strftime("%H:%M")
+    now_str = now.strftime("%H:%M")
 
     for batch in [twse_ids[i:i+batch_size] for i in range(0, len(twse_ids), batch_size)]:
         try:
@@ -1260,9 +1260,11 @@ def monitor():
 
     # 也抓今日最高最低（用 getStockInfo 的 h/l 欄位）
     high_low = {}
-    now_dt = datetime.now()
-    is_trading = (now_dt.weekday() < 5 and
-                  (9 <= now_dt.hour < 13 or (now_dt.hour == 13 and now_dt.minute <= 30)))
+    import pytz
+    tz_tw = pytz.timezone("Asia/Taipei")
+    now_tw = datetime.now(tz_tw)
+    is_trading = (now_tw.weekday() < 5 and
+                  (9 <= now_tw.hour < 13 or (now_tw.hour == 13 and now_tw.minute <= 30)))
     if is_trading:
         for batch in [all_ids[i:i+50] for i in range(0, len(all_ids), 50)]:
             for prefix in ["tse_", "otc_"]:
