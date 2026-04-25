@@ -951,83 +951,79 @@ def get_all_data():
         except:
             return None
 
-    def parse_s13_row(stock_id, stock_name, period, content):
-        """解析一筆處置股資料，回傳 dict 或 None"""
-        if "二十分鐘" not in content:
-            return None
-        if stock_id in s13_seen:
-            return None
-        sep = "～" if "～" in period else ("~" if "~" in period else "")
-        end_str   = period.split(sep)[-1].strip() if sep else ""
-        start_str = period.split(sep)[0].strip() if sep else ""
-        end_date   = parse_roc_date(end_str)
-        start_date = parse_roc_date(start_str)
-        if end_date is None:
-            return None
-        today13 = datetime.now().date()
-        days_left = (end_date.date() - today13).days
-        if stock_id not in close_3m.columns:
-            return None
-        prices = close_3m[stock_id].dropna()
-        if len(prices) < 10:
-            return None
-        ma10 = prices.rolling(10).mean()
-        ma20 = prices.rolling(20).mean()
-        current_price = round(float(prices.iloc[-1]), 2)
-        current_ma10  = round(float(ma10.iloc[-1]), 2) if not pd.isna(ma10.iloc[-1]) else None
-        current_ma20  = round(float(ma20.iloc[-1]), 2) if not pd.isna(ma20.iloc[-1]) else None
-        return {
-            "股票代號": stock_id,
-            "股票名稱": stock_name,
-            "處置期間": period,
-            "出關日期": end_date.strftime("%Y-%m-%d"),
-            "剩餘天數": days_left,
-            "目前股價": current_price,
-            "10日均線": current_ma10,
-            "月線(MA20)": current_ma20,
-            "處置開始日": start_date.strftime("%Y-%m-%d") if start_date else "",
-        }
+    def add_disposal_rows(rows_data, source="twse"):
+        for row in rows_data:
+            try:
+                stock_id   = str(row[2]).strip()
+                stock_name = str(row[3]).strip()
+                if source == "twse":
+                    period  = str(row[6]).strip() if len(row) > 6 else ""
+                    content = str(row[8]).strip() if len(row) > 8 else ""
+                else:  # otc 格式可能不同，先嘗試同樣欄位
+                    period  = str(row[6]).strip() if len(row) > 6 else ""
+                    content = str(row[8]).strip() if len(row) > 8 else ""
+
+                # 只保留20分鐘搓合
+                if "二十分鐘" not in content:
+                    continue
+                if stock_id in s13_seen:
+                    continue
+
+                sep = "～" if "～" in period else ("~" if "~" in period else "")
+                end_str   = period.split(sep)[-1].strip() if sep else ""
+                start_str = period.split(sep)[0].strip() if sep else ""
+                end_date   = parse_roc_date(end_str)
+                start_date = parse_roc_date(start_str)
+                if end_date is None:
+                    continue
+
+                today13 = datetime.now().date()
+                days_left = (end_date.date() - today13).days
+
+                if stock_id not in close_3m.columns:
+                    continue
+                prices = close_3m[stock_id].dropna()
+                if len(prices) < 10:
+                    continue
+
+                ma10 = prices.rolling(10).mean()
+                ma20 = prices.rolling(20).mean()
+                current_price = round(float(prices.iloc[-1]), 2)
+                current_ma10  = round(float(ma10.iloc[-1]), 2) if not pd.isna(ma10.iloc[-1]) else None
+                current_ma20  = round(float(ma20.iloc[-1]), 2) if not pd.isna(ma20.iloc[-1]) else None
+
+                s13.append({
+                    "股票代號": stock_id,
+                    "股票名稱": stock_name,
+                    "處置期間": period,
+                    "出關日期": end_date.strftime("%Y-%m-%d"),
+                    "剩餘天數": days_left,
+                    "目前股價": current_price,
+                    "10日均線": current_ma10,
+                    "月線(MA20)": current_ma20,
+                    "處置開始日": start_date.strftime("%Y-%m-%d") if start_date else "",
+                })
+                s13_seen.add(stock_id)
+            except:
+                continue
 
     try:
-        # ── 上市（TWSE） ──
+        # 上市（TWSE）
         twse_res = requests.get("https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
                                 headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
         twse_data = twse_res.json()
         if twse_data.get("stat") == "OK":
-            for row in twse_data.get("data", []):
-                try:
-                    stock_id   = row[2].strip()
-                    stock_name = row[3].strip()
-                    period     = row[6].strip() if len(row) > 6 else ""
-                    content    = row[8].strip() if len(row) > 8 else ""
-                    rec = parse_s13_row(stock_id, stock_name, period, content)
-                    if rec:
-                        s13.append(rec)
-                        s13_seen.add(stock_id)
-                except:
-                    continue
+            add_disposal_rows(twse_data.get("data", []), source="twse")
     except Exception as e:
         print(f"策略13 TWSE 失敗: {e}")
 
     try:
-        # ── 上櫃（OTC/TPEX） ──
-        otc_res = requests.get("https://www.tpex.org.tw/web/bulletin/disposal/disposal_ajax.php?l=zh-tw",
+        # 上櫃（OTC）
+        otc_res = requests.get("https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
                                headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-        otc_data = otc_res.json()
-        # TPEX 回傳格式：{"aaData": [[...], ...]}
-        rows_otc = otc_data.get("aaData", otc_data.get("data", []))
-        for row in rows_otc:
-            try:
-                stock_id   = str(row[2]).strip()
-                stock_name = str(row[3]).strip()
-                period     = str(row[6]).strip() if len(row) > 6 else ""
-                content    = str(row[8]).strip() if len(row) > 8 else ""
-                rec = parse_s13_row(stock_id, stock_name, period, content)
-                if rec:
-                    s13.append(rec)
-                    s13_seen.add(stock_id)
-            except:
-                continue
+        otc_json = otc_res.json()
+        otc_rows = otc_json.get("aaData", otc_json.get("data", []))
+        add_disposal_rows(otc_rows, source="otc")
     except Exception as e:
         print(f"策略13 OTC 失敗: {e}")
 
