@@ -1012,50 +1012,79 @@ def get_all_data():
     except Exception as e:
         print(f"策略13 TWSE 失敗: {e}")
 
-    # 補充來源：disposal_history 裡有 is_20min 標記的上櫃股票
+    # 補充來源：stockwarden 公開 JSON（上市＋上櫃完整20分鐘資料）
     try:
+        sw_res = requests.get(
+            "https://storage.googleapis.com/stockwarden-prod-public/api/dispositions.json",
+            headers={"User-Agent": "Mozilla/5.0"}, timeout=10
+        )
+        sw_data = sw_res.json()
         today13 = datetime.now().date()
-        for stock_id, info in _global_disposal_2m.items():
-            if stock_id in s13_seen:
+        # stockwarden 格式：list of dicts
+        for item in sw_data:
+            try:
+                # 只要20分鐘
+                matching = str(item.get("matching", item.get("matchingMinutes", item.get("interval", "")))).replace(" ", "")
+                if "20" not in matching and "二十" not in matching:
+                    continue
+                stock_id   = str(item.get("stockId", item.get("stock_id", item.get("code", "")))).strip()
+                stock_name = str(item.get("stockName", item.get("stock_name", item.get("name", "")))).strip()
+                if not stock_id or stock_id in s13_seen:
+                    continue
+                # 取得出關日期
+                end_str   = str(item.get("endDate", item.get("end_date", item.get("dispositionEnd", "")))).strip()
+                start_str = str(item.get("startDate", item.get("start_date", item.get("dispositionStart", "")))).strip()
+                # 嘗試解析日期（可能是 YYYY-MM-DD 或民國格式）
+                end_date = None
+                start_date = None
+                for fmt in ["%Y-%m-%d", "%Y/%m/%d"]:
+                    try:
+                        end_date = datetime.strptime(end_str, fmt)
+                        break
+                    except:
+                        pass
+                if end_date is None:
+                    end_date = parse_roc_date_13(end_str)
+                for fmt in ["%Y-%m-%d", "%Y/%m/%d"]:
+                    try:
+                        start_date = datetime.strptime(start_str, fmt)
+                        break
+                    except:
+                        pass
+                if start_date is None:
+                    start_date = parse_roc_date_13(start_str)
+                if end_date is None:
+                    continue
+                if end_date.date() < today13:
+                    continue
+                days_left = (end_date.date() - today13).days
+                if stock_id not in close_3m.columns:
+                    continue
+                prices = close_3m[stock_id].dropna()
+                if len(prices) < 10:
+                    continue
+                ma10 = prices.rolling(10).mean()
+                ma20 = prices.rolling(20).mean()
+                current_price = round(float(prices.iloc[-1]), 2)
+                current_ma10  = round(float(ma10.iloc[-1]), 2) if not pd.isna(ma10.iloc[-1]) else None
+                current_ma20  = round(float(ma20.iloc[-1]), 2) if not pd.isna(ma20.iloc[-1]) else None
+                period = f"{start_str}～{end_str}" if start_str else end_str
+                s13.append({
+                    "股票代號": stock_id,
+                    "股票名稱": stock_name,
+                    "處置期間": period,
+                    "出關日期": end_date.strftime("%Y-%m-%d"),
+                    "剩餘天數": days_left,
+                    "目前股價": current_price,
+                    "10日均線": current_ma10,
+                    "月線(MA20)": current_ma20,
+                    "處置開始日": start_date.strftime("%Y-%m-%d") if start_date else "",
+                })
+                s13_seen.add(stock_id)
+            except Exception as ex:
                 continue
-            if not info.get("is_20min", False):
-                continue
-            # 判斷是否還在處置期間內
-            period = info.get("period", "")
-            sep = "～" if "～" in period else ("~" if "~" in period else "")
-            end_str = period.split(sep)[-1].strip() if sep else ""
-            start_str = period.split(sep)[0].strip() if sep else ""
-            end_date = parse_roc_date_13(end_str)
-            start_date = parse_roc_date_13(start_str)
-            if end_date is None:
-                continue
-            if end_date.date() < today13:
-                continue  # 已出關
-            days_left = (end_date.date() - today13).days
-            if stock_id not in close_3m.columns:
-                continue
-            prices = close_3m[stock_id].dropna()
-            if len(prices) < 10:
-                continue
-            ma10 = prices.rolling(10).mean()
-            ma20 = prices.rolling(20).mean()
-            current_price = round(float(prices.iloc[-1]), 2)
-            current_ma10  = round(float(ma10.iloc[-1]), 2) if not pd.isna(ma10.iloc[-1]) else None
-            current_ma20  = round(float(ma20.iloc[-1]), 2) if not pd.isna(ma20.iloc[-1]) else None
-            s13.append({
-                "股票代號": stock_id,
-                "股票名稱": info["name"],
-                "處置期間": period,
-                "出關日期": end_date.strftime("%Y-%m-%d"),
-                "剩餘天數": days_left,
-                "目前股價": current_price,
-                "10日均線": current_ma10,
-                "月線(MA20)": current_ma20,
-                "處置開始日": start_date.strftime("%Y-%m-%d") if start_date else "",
-            })
-            s13_seen.add(stock_id)
     except Exception as e:
-        print(f"策略13 OTC補充失敗: {e}")
+        print(f"策略13 stockwarden補充失敗: {e}")
 
     s13.sort(key=lambda x: x["剩餘天數"])
 
@@ -1320,6 +1349,16 @@ def debug13():
         result["twse_sample_row0"] = twse_data.get("data", [[]])[0] if twse_data.get("data") else []
     except Exception as e:
         result["twse_error"] = str(e)
+    # 測試 stockwarden API
+    try:
+        sw_res = requests.get("https://storage.googleapis.com/stockwarden-prod-public/api/dispositions.json",
+                              headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        sw_data = sw_res.json()
+        result["stockwarden_count"] = len(sw_data)
+        result["stockwarden_sample"] = sw_data[:2] if sw_data else []
+    except Exception as e:
+        result["stockwarden_error"] = str(e)
+
     # 看 disposal_history.json 的內容
     try:
         import os as _os, json as _json2
