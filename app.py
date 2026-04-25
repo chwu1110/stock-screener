@@ -943,7 +943,7 @@ def get_all_data():
     s13 = []
     s13_seen = set()
 
-    def parse_roc_date(s):
+    def parse_roc_date_13(s):
         try:
             parts = s.strip().split("/")
             y = int(parts[0]) + 1911
@@ -951,19 +951,15 @@ def get_all_data():
         except:
             return None
 
-    def add_disposal_rows(rows_data, source="twse"):
-        for row in rows_data:
+    def process_disposal_rows_13(rows):
+        today13 = datetime.now().date()
+        for row in rows:
             try:
                 stock_id   = str(row[2]).strip()
                 stock_name = str(row[3]).strip()
-                if source == "twse":
-                    period  = str(row[6]).strip() if len(row) > 6 else ""
-                    content = str(row[8]).strip() if len(row) > 8 else ""
-                else:  # otc 格式可能不同，先嘗試同樣欄位
-                    period  = str(row[6]).strip() if len(row) > 6 else ""
-                    content = str(row[8]).strip() if len(row) > 8 else ""
+                period     = str(row[6]).strip() if len(row) > 6 else ""
+                content    = str(row[8]).strip() if len(row) > 8 else ""
 
-                # 只保留20分鐘搓合
                 if "二十分鐘" not in content:
                     continue
                 if stock_id in s13_seen:
@@ -972,12 +968,11 @@ def get_all_data():
                 sep = "～" if "～" in period else ("~" if "~" in period else "")
                 end_str   = period.split(sep)[-1].strip() if sep else ""
                 start_str = period.split(sep)[0].strip() if sep else ""
-                end_date   = parse_roc_date(end_str)
-                start_date = parse_roc_date(start_str)
+                end_date   = parse_roc_date_13(end_str)
+                start_date = parse_roc_date_13(start_str)
                 if end_date is None:
                     continue
 
-                today13 = datetime.now().date()
                 days_left = (end_date.date() - today13).days
 
                 if stock_id not in close_3m.columns:
@@ -1004,29 +999,31 @@ def get_all_data():
                     "處置開始日": start_date.strftime("%Y-%m-%d") if start_date else "",
                 })
                 s13_seen.add(stock_id)
-            except:
+            except Exception as ex:
+                print(f"策略13 row 解析失敗: {ex}")
                 continue
 
     try:
-        # 上市（TWSE）
         twse_res = requests.get("https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
                                 headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
         twse_data = twse_res.json()
+        print(f"策略13 TWSE stat={twse_data.get('stat')} rows={len(twse_data.get('data', []))}")
         if twse_data.get("stat") == "OK":
-            add_disposal_rows(twse_data.get("data", []), source="twse")
+            process_disposal_rows_13(twse_data.get("data", []))
     except Exception as e:
         print(f"策略13 TWSE 失敗: {e}")
 
     try:
-        # 上櫃（OTC）
         otc_res = requests.get("https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
                                headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
         otc_json = otc_res.json()
         otc_rows = otc_json.get("aaData", otc_json.get("data", []))
-        add_disposal_rows(otc_rows, source="otc")
+        print(f"策略13 OTC rows={len(otc_rows)}")
+        process_disposal_rows_13(otc_rows)
     except Exception as e:
         print(f"策略13 OTC 失敗: {e}")
 
+    print(f"策略13 最終筆數: {len(s13)}")
     s13.sort(key=lambda x: x["剩餘天數"])
 
     return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13
