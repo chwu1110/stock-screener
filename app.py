@@ -1287,15 +1287,18 @@ def debug13():
         result["twse_sample_row0"] = twse_data.get("data", [[]])[0] if twse_data.get("data") else []
     except Exception as e:
         result["twse_error"] = str(e)
-    try:
-        otc_res = requests.get("https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
-                               headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-        otc_json = otc_res.json()
-        otc_rows = otc_json.get("aaData", otc_json.get("data", []))
-        result["otc_total_rows"] = len(otc_rows)
-        result["otc_sample_row0"] = otc_rows[0] if otc_rows else []
-    except Exception as e:
-        result["otc_error"] = str(e)
+    otc_urls = [
+        "https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
+        "https://www.tpex.org.tw/web/bulletin/disposal/disposal_download.php?l=zh-tw&o=json",
+        "https://www.tpex.org.tw/rwd/zh/bulletin/disposal?response=json",
+        "https://www.tpex.org.tw/web/bulletin/disposal/index.php?l=zh-tw&o=json",
+    ]
+    for otc_url in otc_urls:
+        try:
+            otc_res = requests.get(otc_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8, verify=False)
+            result[f"otc_{otc_url[-30:]}"] = {"status": otc_res.status_code, "preview": otc_res.text[:200]}
+        except Exception as e:
+            result[f"otc_{otc_url[-30:]}"] = {"error": str(e)}
     return _json.dumps(result, ensure_ascii=False, indent=2), 200, {"Content-Type": "application/json"}
 
 @app.route("/strategy/13")
