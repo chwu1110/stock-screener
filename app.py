@@ -11,7 +11,7 @@ from flask import Flask, render_template_string
 
 app = Flask(__name__)
 
-FINLAB_API_KEY = "LBmwu3n0/lor77y1Z0aBH/Q0WBI6+bLJrA2TlchZAM1jb6jJaURRbaQRZRWjozwP#vip_m"
+FINLAB_API_KEY = os.environ.get("FINLAB_API_KEY", "LBmwu3n0/lor77y1Z0aBH/Q0WBI6+bLJrA2TlchZAM1jb6jJaURRbaQRZRWjozwP#vip_m")
 
 HOME_TEMPLATE = """
 <!DOCTYPE html>
@@ -43,7 +43,6 @@ HOME_TEMPLATE = """
 <body>
     <h1>📊 台股選股平台</h1>
     <p class="subtitle">更新時間：{{ update_time }}｜點擊策略卡片查看詳細結果</p>
-    <a href="/monitor" style="display:inline-block;margin-bottom:20px;padding:10px 24px;background:#1e3a5f;color:#38bdf8;border-radius:8px;text-decoration:none;font-size:14px;font-weight:bold;border:1px solid #38bdf844;">📡 即時監控總覽（整合所有策略）</a>
 
     <div class="section-title">📈 上市櫃策略</div>
     <div class="grid">
@@ -92,7 +91,7 @@ HOME_TEMPLATE = """
         <a href="/strategy/7" class="card">
             <div class="card-icon">⚠️</div>
             <div class="card-title">處置股跌破10日線</div>
-            <div class="card-desc">目前正在被處置的股票，且收盤價跌破10日均線</div>
+            <div class="card-desc">目前正在被處置的股票，且收盤價跌破10日均線（每支只列一筆）</div>
             <div class="card-count">{{ counts[6] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
@@ -106,13 +105,19 @@ HOME_TEMPLATE = """
         <a href="/strategy/12" class="card">
             <div class="card-icon">📊</div>
             <div class="card-title">處置股來到月線</div>
-            <div class="card-desc">兩個月內曾被處置的股票，股價在20日均線上下3%以內</div>
+            <div class="card-desc">兩個月內曾被處置的股票，股價在20日均線上下6%以內</div>
             <div class="card-count">{{ counts[11] }}</div>
             <div class="card-count-label">符合股票數</div>
             <div style="margin-top:10px;font-size:12px;color:#38bdf8;">🔴 <a href="/strategy/12/realtime" style="color:#38bdf8;">即時版（盤中）</a></div>
         </a>
+        <a href="/strategy/13" class="card">
+            <div class="card-icon">⏳</div>
+            <div class="card-title">20分處置股</div>
+            <div class="card-desc">目前正在被處置的股票，依出關日由近到遠排列，含走勢圖</div>
+            <div class="card-count">{{ counts[12] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
     </div>
-
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
 </body>
 </html>
@@ -145,6 +150,22 @@ DETAIL_TEMPLATE = """
         .stock-id { color: #38bdf8; font-weight: bold; }
         .empty { text-align: center; color: #94a3b8; padding: 40px; background: #1e293b; border-radius: 12px; }
         .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 20px; }
+        .stock-id-cell { display: flex; align-items: center; gap: 8px; }
+        .copy-btn {
+            background: #1e3a5f; border: 1px solid #2d5a8e; color: #7dd3fc;
+            border-radius: 5px; padding: 2px 8px; font-size: 11px; cursor: pointer;
+            transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+        }
+        .copy-btn:hover { background: #2d5a8e; color: #e0f2fe; }
+        .copy-btn.copied { background: #14532d; border-color: #166534; color: #4ade80; }
+        .copy-all-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #1e3a5f; border: 1px solid #2d5a8e; color: #7dd3fc;
+            border-radius: 8px; padding: 7px 16px; font-size: 13px; cursor: pointer;
+            margin-bottom: 14px; transition: all 0.15s;
+        }
+        .copy-all-btn:hover { background: #2d5a8e; color: #e0f2fe; }
+        .copy-all-btn.copied { background: #14532d; border-color: #166534; color: #4ade80; }
     </style>
 </head>
 <body>
@@ -158,6 +179,11 @@ DETAIL_TEMPLATE = """
     </div>
 
     {% if stocks %}
+    <div>
+        <button class="copy-all-btn" onclick="copyAll(this)">
+            <span class="btn-icon">📋</span><span class="btn-text">複製全部代號</span>
+        </button>
+    </div>
     <table>
         <thead>
             <tr>
@@ -175,7 +201,16 @@ DETAIL_TEMPLATE = """
                     {% elif '漲幅' in col or '收盤' in col or '漲停' in col %}gain
                     {% elif '修正' in col or '開盤' in col %}loss
                     {% endif %}
-                ">{{ s[col] }}</td>
+                ">
+                    {% if col == '股票代號' %}
+                    <div class="stock-id-cell">
+                        <span>{{ s[col] }}</span>
+                        <button class="copy-btn" onclick="copySingle(this, '{{ s[col] }}')">複製</button>
+                    </div>
+                    {% else %}
+                    {{ s[col] }}
+                    {% endif %}
+                </td>
                 {% endfor %}
             </tr>
             {% endfor %}
@@ -186,6 +221,70 @@ DETAIL_TEMPLATE = """
     {% endif %}
 
     <p class="updated">資料來源：FinLab｜更新時間：{{ update_time }}</p>
+
+    <script>
+        function copySingle(btn, code) {
+            navigator.clipboard.writeText(code).then(function() {
+                btn.textContent = '✓';
+                btn.classList.add('copied');
+                setTimeout(function() {
+                    btn.textContent = '複製';
+                    btn.classList.remove('copied');
+                }, 1500);
+            }).catch(function() {
+                fallbackCopy(code);
+                btn.textContent = '✓';
+                btn.classList.add('copied');
+                setTimeout(function() {
+                    btn.textContent = '複製';
+                    btn.classList.remove('copied');
+                }, 1500);
+            });
+        }
+
+        function copyAll(btn) {
+            var codes = [];
+            document.querySelectorAll('tbody .stock-id-cell span').forEach(function(el) {
+                codes.push(el.textContent.trim());
+            });
+            var text = codes.join('\\n');
+            navigator.clipboard.writeText(text).then(function() {
+                showCopied(btn, codes.length);
+            }).catch(function() {
+                fallbackCopy(text);
+                showCopied(btn, codes.length);
+            });
+        }
+
+        function showCopied(btn, count) {
+            btn.querySelector('.btn-icon').textContent = '✓';
+            btn.querySelector('.btn-text').textContent = '已複製 ' + count + ' 個代號';
+            btn.classList.add('copied');
+            setTimeout(function() {
+                btn.querySelector('.btn-icon').textContent = '📋';
+                btn.querySelector('.btn-text').textContent = '複製全部代號';
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+
+        function fallbackCopy(text) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+
+        document.querySelectorAll('td').forEach(function(td) {
+            if (td.textContent.includes('★')) {
+                td.innerHTML = td.innerHTML.replace(/★/g, '<span style="color:#ff4444">★</span>');
+            }
+        });
+    </script>
 </body>
 </html>
 """
@@ -234,7 +333,7 @@ REALTIME_TEMPLATE = """
 <body>
     <a href="/" class="back">← 返回首頁</a>
     <h1>📊 處置股來到月線</h1>
-    <p class="subtitle">兩個月內曾被處置的股票，即時股價在20日均線上下3%以內，偏離最小的在前</p>
+    <p class="subtitle">兩個月內曾被處置的股票，即時股價在20日均線上下6%以內，偏離最小的在前</p>
     <div class="badge">🔴 即時模式｜每5分鐘自動更新</div><br>
 
     <div class="stat-box">
@@ -246,7 +345,7 @@ REALTIME_TEMPLATE = """
     <table>
         <thead>
             <tr>
-                <th>股票代號</th><th>股票名稱</th><th>產業別</th><th>處置期間</th>
+                <th>股票代號</th><th>股票名稱</th><th>處置期間</th>
                 <th>即時股價</th><th>20日均線</th><th>偏離幅度</th><th>資料時間</th>
             </tr>
         </thead>
@@ -255,7 +354,6 @@ REALTIME_TEMPLATE = """
             <tr>
                 <td class="stock-id">{{ s['股票代號'] }}</td>
                 <td>{{ s['股票名稱'] }}</td>
-                <td>{{ s['產業別'] }}</td>
                 <td>{{ s['處置期間'] }}</td>
                 <td class="{{ 'gain' if s['偏離幅度'][0] != '-' else 'loss' }}">{{ s['即時股價'] }}</td>
                 <td>{{ s['20日均線'] }}</td>
@@ -323,15 +421,9 @@ def get_tpex_realtime(stock_ids):
         print(f"櫃買即時API錯誤: {e}")
     return prices
 
-FUGLE_API_KEY = os.environ.get("FUGLE_API_KEY", "")
-
 def get_realtime_prices(stock_ids):
-    """抓所有股票的即時股價 - 使用 Fugle API"""
-    import pytz
-    tz_tw = pytz.timezone("Asia/Taipei")
-    now = datetime.now(tz_tw)
-    now_naive = datetime.now()
-
+    """抓所有處置股的即時股價（自動判斷上市/上櫃）"""
+    now = datetime.now()
     # 非交易時間直接回傳空
     if now.weekday() >= 5:
         return {}
@@ -339,37 +431,55 @@ def get_realtime_prices(stock_ids):
         return {}
 
     # 5分鐘快取
-    if _realtime_cache["time"] and (now_naive - _realtime_cache["time"]).seconds < 300:
+    if _realtime_cache["time"] and (now - _realtime_cache["time"]).seconds < 300:
         return _realtime_cache["prices"]
 
     prices = {}
-    now_str = now.strftime("%H:%M")
-    headers = {"X-API-KEY": FUGLE_API_KEY}
+    # 全部先試上市，再試上櫃（同一個API，用 tse_ 或 otc_ 前綴）
+    # 分批處理（每批50檔）
+    twse_ids = [f"tse_{sid}.tw" for sid in stock_ids]
+    tpex_ids = [f"otc_{sid}.tw" for sid in stock_ids]
 
-    for sid in stock_ids:
+    batch_size = 50
+    now_str = datetime.now().strftime("%H:%M")
+
+    for batch in [twse_ids[i:i+batch_size] for i in range(0, len(twse_ids), batch_size)]:
         try:
-            url = f"https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/{sid}"
-            resp = requests.get(url, headers=headers, timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                price = data.get("closePrice") or data.get("lastPrice") or data.get("referencePrice")
-                high  = data.get("highPrice", "-")
-                low   = data.get("lowPrice", "-")
-                prev  = data.get("referencePrice", 0)
-                if price:
-                    prices[sid] = {
-                        "price": float(price),
-                        "high":  float(high) if high != "-" else "-",
-                        "low":   float(low)  if low  != "-" else "-",
-                        "prev":  float(prev) if prev else 0,
-                        "time":  now_str,
-                    }
+            ids_str = "|".join(batch)
+            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+            for item in resp.json().get("msgArray", []):
+                sid = item.get("c", "")
+                p = item.get("z", "-")
+                if p and p != "-":
+                    try:
+                        prices[sid] = {"price": float(p), "time": now_str}
+                    except:
+                        pass
+        except:
+            pass
+
+    # 沒抓到的再試上櫃
+    missing = [sid for sid in stock_ids if sid not in prices]
+    for batch in [missing[i:i+batch_size] for i in range(0, len(missing), batch_size)]:
+        try:
+            ids_str = "|".join([f"otc_{sid}.tw" for sid in batch])
+            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+            for item in resp.json().get("msgArray", []):
+                sid = item.get("c", "")
+                p = item.get("z", "-")
+                if p and p != "-":
+                    try:
+                        prices[sid] = {"price": float(p), "time": now_str}
+                    except:
+                        pass
         except:
             pass
 
     _realtime_cache["prices"] = prices
-    _realtime_cache["time"] = now_naive
-    print(f"即時股價(Fugle): 抓到 {len(prices)}/{len(stock_ids)} 檔")
+    _realtime_cache["time"] = now
+    print(f"即時股價: 抓到 {len(prices)}/{len(stock_ids)} 檔")
     return prices
 
 def get_ma20_cache(disposal_stocks_2m, close_3m):
@@ -400,7 +510,7 @@ def get_ma20_cache(disposal_stocks_2m, close_3m):
 
 
 def get_all_data():
-    finlab.login(api_token=FINLAB_API_KEY)
+    finlab.login(FINLAB_API_KEY)
 
     today = datetime.today()
     start_2026 = "2026-01-01"
@@ -440,19 +550,12 @@ def get_all_data():
 
     close = data.get("price:收盤價")
     open_ = data.get("price:開盤價")
-    high_ = data.get("price:最高價")
-    low_  = data.get("price:最低價")
     stock_info = data.get("company_basic_info")
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
 
-    global _global_industry_dict
-    _global_industry_dict = industry_dict
-
     close_df = pd.DataFrame(close.values, index=pd.to_datetime(close.index.astype(str)), columns=close.columns)
     open_df = pd.DataFrame(open_.values, index=pd.to_datetime(open_.index.astype(str)), columns=open_.columns)
-    high_df = pd.DataFrame(high_.values, index=pd.to_datetime(high_.index.astype(str)), columns=high_.columns)
-    low_df  = pd.DataFrame(low_.values,  index=pd.to_datetime(low_.index.astype(str)),  columns=low_.columns)
 
     close_1yr = close_df[close_df.index >= pd.to_datetime(start_1yr)]
     close_3m = close_df[close_df.index >= pd.to_datetime(start_3m)]
@@ -464,26 +567,41 @@ def get_all_data():
     close_1m = close_df[close_df.index >= pd.to_datetime(start_1m)]
     close_2026 = close_df[close_df.index >= pd.to_datetime(start_2026)]
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
-    high_1m = high_df[high_df.index >= pd.to_datetime(start_1m)]
-    low_1m  = low_df[low_df.index  >= pd.to_datetime(start_1m)]
+    open_1m = open_df[open_df.index >= pd.to_datetime(start_1m)]
 
-    def is_strong_day(stock, date, df_close, df_high, df_low, df_open=None):
-        """判斷是否為強勢漲停日：一價到底(高低差≤2%) 或 開盤即漲停"""
-        try:
-            c = df_close[stock].loc[date]
-            h = df_high[stock].loc[date]
-            l = df_low[stock].loc[date]
-            hl_diff = (h - l) / l if l > 0 else 1
-            if hl_diff <= 0.02:
-                return True
-            if df_open is not None:
-                o = df_open[stock].loc[date]
-                prev_c = df_close[stock].iloc[df_close.index.get_loc(date) - 1]
-                if prev_c > 0 and (o - prev_c) / prev_c >= 0.095:
-                    return True
-        except:
-            pass
-        return False
+    try:
+        low_ = data.get("price:最低價")
+        low_df = pd.DataFrame(low_.values, index=pd.to_datetime(low_.index.astype(str)), columns=low_.columns)
+        low_1m = low_df[low_df.index >= pd.to_datetime(start_1m)]
+        print("Daily usage: -- price:最低價 載入完成")
+    except Exception as e:
+        print(f"price:最低價 載入失敗，改用開盤價判斷: {e}")
+        low_1m = None
+
+    def gap_stars(stock, dates):
+        """判斷是否為跳空漲停（一價到底）：開盤＝漲停價 且 最低＝漲停價"""
+        stars = 0
+        for d in dates:
+            try:
+                idx = close_1m.index.get_loc(d)
+                if idx < 1:
+                    continue
+                prev_c = close_1m[stock].iloc[idx - 1]
+                open_p = open_1m[stock].loc[d] if d in open_1m.index else None
+                if pd.notna(prev_c) and prev_c > 0 and open_p is not None and pd.notna(open_p):
+                    limit_up = round(prev_c * 1.1, 2)
+                    if abs(open_p - limit_up) < 0.02:
+                        # 有最低價資料就用一價到底判斷，沒有就只用開盤判斷
+                        if low_1m is not None and d in low_1m.index:
+                            low_p = low_1m[stock].loc[d]
+                            if pd.notna(low_p) and abs(low_p - limit_up) < 0.02:
+                                stars += 1
+                        else:
+                            stars += 1
+            except:
+                pass
+        return "★" * stars if stars > 0 else ""
+
 
     # 策略一：二手紅盤（最近一個月）
     daily_return_1m = close_1m.pct_change()
@@ -496,13 +614,11 @@ def get_all_data():
         for date in dates:
             prev_idx = is_limit_up.index.get_loc(date) - 1
             prev_date = is_limit_up.index[prev_idx]
-            star1 = "⭐" if is_strong_day(stock, prev_date, close_1m, high_1m, low_1m, open_df) else ""
-            star2 = "⭐" if is_strong_day(stock, date, close_1m, high_1m, low_1m, open_df) else ""
             s1.append({
-                "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [prev_date, date]),
                 "第一天漲停日": str(prev_date)[:10], "第二天漲停日": str(date)[:10],
-                "第一天收盤": f"{star1}{round(close_1m[stock].loc[prev_date], 2)}",
-                "第二天收盤": f"{star2}{round(close_1m[stock].loc[date], 2)}",
+                "第一天收盤": round(close_1m[stock].loc[prev_date], 2),
+                "第二天收盤": round(close_1m[stock].loc[date], 2),
             })
     s1.sort(key=lambda x: x["第二天漲停日"], reverse=True)
 
@@ -578,16 +694,13 @@ def get_all_data():
             gain = rolling_3.loc[date]
             cond = "連續三天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3]) else "三天漲幅≥30%"
             if stock not in s4_dict or gain > float(s4_dict[stock]["三日累積漲幅"].replace("%","")):
-                star1 = "⭐" if is_strong_day(stock, d1, close_1m, high_1m, low_1m, open_df) else ""
-                star2 = "⭐" if is_strong_day(stock, d2, close_1m, high_1m, low_1m, open_df) else ""
-                star3 = "⭐" if is_strong_day(stock, d3, close_1m, high_1m, low_1m, open_df) else ""
                 s4_dict[stock] = {
-                    "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [d1, d2, d3]),
                     "觸發條件": cond,
                     "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10],
-                    "第一天收盤": f"{star1}{round(close_1m[stock].loc[d1], 2)}",
-                    "第二天收盤": f"{star2}{round(close_1m[stock].loc[d2], 2)}",
-                    "第三天收盤": f"{star3}{round(close_1m[stock].loc[d3], 2)}",
+                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                    "第二天收盤": round(close_1m[stock].loc[d2], 2),
+                    "第三天收盤": round(close_1m[stock].loc[d3], 2),
                     "三日累積漲幅": f"{gain*100:.1f}%",
                 }
 
@@ -611,14 +724,12 @@ def get_all_data():
             gain = rolling_4.loc[date]
             cond = "連續四天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3] and is_lu.loc[d4]) else "四天漲幅≥40%"
             if stock not in s5_dict or gain > float(s5_dict[stock]["四日累積漲幅"].replace("%","")):
-                star1 = "⭐" if is_strong_day(stock, d1, close_1m, high_1m, low_1m, open_df) else ""
-                star4 = "⭐" if is_strong_day(stock, d4, close_1m, high_1m, low_1m, open_df) else ""
                 s5_dict[stock] = {
-                    "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [d1, d2, d3, d4]),
                     "觸發條件": cond,
                     "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10], "第四天": str(d4)[:10],
-                    "第一天收盤": f"{star1}{round(close_1m[stock].loc[d1], 2)}",
-                    "第四天收盤": f"{star4}{round(close_1m[stock].loc[d4], 2)}",
+                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                    "第四天收盤": round(close_1m[stock].loc[d4], 2),
                     "四日累積漲幅": f"{gain*100:.1f}%",
                 }
 
@@ -643,45 +754,57 @@ def get_all_data():
             # 每支股票只保留漲幅最大的那筆
             if stock not in s6_dict or gain > float(s6_dict[stock]["五日累積漲幅"].replace("%","")):
                 d1 = series.index[idx-4]
+                d2 = series.index[idx-3]
+                d3 = series.index[idx-2]
+                d4 = series.index[idx-1]
                 d5 = series.index[idx]
-                star1 = "⭐" if is_strong_day(stock, d1, close_1m, high_1m, low_1m, open_df) else ""
-                star5 = "⭐" if is_strong_day(stock, d5, close_1m, high_1m, low_1m, open_df) else ""
                 s6_dict[stock] = {
-                    "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "股票代號": stock, "股票名稱": name_dict.get(stock, "") + gap_stars(stock, [d1, d2, d3, d4, d5]),
                     "第一天": str(d1)[:10], "第五天": str(d5)[:10],
-                    "第一天收盤": f"{star1}{round(close_1m[stock].loc[d1], 2)}",
-                    "第五天收盤": f"{star5}{round(close_1m[stock].loc[d5], 2)}",
+                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                    "第五天收盤": round(close_1m[stock].loc[d5], 2),
                     "五日累積漲幅": f"{gain*100:.1f}%",
                 }
 
     s6 = list(s6_dict.values())
     s6.sort(key=lambda x: x["第五天"], reverse=True)
 
-    # 策略七：處置股跌破10日線（每次跌破列一筆）
+    # 去重複：同一支股票只出現在最高等級的策略（五手>四手>三手>二手）
+    s6_stocks = set(x["股票代號"] for x in s6)
+    s5 = [x for x in s5 if x["股票代號"] not in s6_stocks]
+    s5_stocks = set(x["股票代號"] for x in s5)
+    s4 = [x for x in s4 if x["股票代號"] not in s6_stocks and x["股票代號"] not in s5_stocks]
+    s4_stocks = set(x["股票代號"] for x in s4)
+    s1_seen = set()
+    s1_new = []
+    for x in s1:
+        sid = x["股票代號"]
+        if sid not in s6_stocks and sid not in s5_stocks and sid not in s4_stocks and sid not in s1_seen:
+            s1_new.append(x)
+            s1_seen.add(sid)
+    s1 = s1_new
+
+
+    # 策略七：目前正在被處置的股票，且目前收盤價跌破10日線（每支只列一筆）
     s7 = []
     try:
-        # 抓取目前處置股清單
+        # 即時抓目前正在處置中的股票清單
         disposal_url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
         disposal_res = requests.get(disposal_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
         disposal_data = disposal_res.json()
 
-        disposal_stocks = {}
+        disposal_stocks_now = {}
         if disposal_data.get("stat") == "OK":
             for row in disposal_data.get("data", []):
                 try:
                     stock_id = row[2].strip()
                     stock_name = row[3].strip()
                     period = row[5].strip() if len(row) > 5 else ""
-                    disposal_stocks[stock_id] = {"name": stock_name, "period": period}
+                    disposal_stocks_now[stock_id] = {"name": stock_name, "period": period}
                 except:
                     continue
 
-        def roc_to_date(s):
-            y, m, d = s.split("/")
-            return pd.Timestamp(int(y)+1911, int(m), int(d))
-
-        # 每次跌破都列一筆
-        for stock_id, info in disposal_stocks.items():
+        for stock_id, info in disposal_stocks_now.items():
             try:
                 if stock_id not in close_3m.columns:
                     continue
@@ -690,151 +813,38 @@ def get_all_data():
                     continue
 
                 ma10 = prices.rolling(10).mean()
+                current_price = prices.iloc[-1]
+                current_ma10 = ma10.iloc[-1]
 
-                # 解析處置期間（民國年轉西元年）
-                period = info.get("period", "")
-                disposal_start = None
-                disposal_end = None
-                try:
-                    parts = period.replace(" ", "").split("~")
-                    if len(parts) == 2:
-                        disposal_start = roc_to_date(parts[0])
-                        disposal_end = roc_to_date(parts[1])
-                except:
-                    pass
+                if pd.isna(current_ma10) or current_ma10 <= 0:
+                    continue
 
-                # 找處置期間內每一天跌破10日線的紀錄
-                for date, price in prices.items():
-                    ma = ma10.get(date)
-                    if pd.isna(ma):
-                        continue
-                    # 只看處置期間內
-                    if disposal_start and disposal_end:
-                        if not (disposal_start <= date <= disposal_end):
-                            continue
-                    if price < ma:
-                        diff_pct = (price - ma) / ma
-                        s7.append({
-                            "股票代號": stock_id,
-                            "股票名稱": info["name"],
-                            "處置期間": period,
-                            "跌破日期": str(date)[:10],
-                            "收盤價": round(price, 2),
-                            "10日均線": round(ma, 2),
-                            "跌破幅度": f"{diff_pct*100:.1f}%",
-                        })
+                # 每支股票只列一筆，看目前最新收盤價是否跌破10日線
+                if current_price < current_ma10:
+                    diff_pct = (current_price - current_ma10) / current_ma10
+                    s7.append({
+                        "股票代號": stock_id,
+                        "股票名稱": info["name"],
+                        "處置期間": info.get("period", ""),
+                        "目前收盤價": round(current_price, 2),
+                        "10日均線": round(current_ma10, 2),
+                        "跌破幅度": f"{diff_pct*100:.1f}%",
+                    })
             except:
                 continue
 
-        # 依股票代號、日期排序
-        s7.sort(key=lambda x: (x["股票代號"], x["跌破日期"]))
+        # 跌破幅度最大的排前面
+        s7.sort(key=lambda x: float(x["跌破幅度"].replace("%", "")))
 
     except Exception as e:
-        print(f"處置股API失敗: {e}")
+        print(f"處置股10日線策略失敗: {e}")
         s7 = []
 
 
-    # 策略八：興櫃爆量強漲（用公開API抓今日資料）
+
+
     s8 = []
-    try:
-        def _esb_float(val):
-            s = str(val).replace(",", "").strip()
-            return float(s) if s and s not in ["-", "--", ""] else 0.0
-
-        # 抓今日即時資料
-        esb_url = "https://www.tpex.org.tw/openapi/v1/tpex_esb_latest_statistics"
-        esb_h = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-        r8 = requests.get(esb_url, headers=esb_h, timeout=15, verify=False)
-        esb_today = {}
-        for item in r8.json():
-            sid = str(item.get("SecuritiesCompanyCode","")).strip()
-            if not sid or not sid.isdigit(): continue
-            prev = _esb_float(item.get("PreviousAveragePrice",0))
-            latest = _esb_float(item.get("LatestPrice",0))
-            high = _esb_float(item.get("Highest",0))
-            vol = _esb_float(item.get("TransactionVolume",0))
-            name8 = str(item.get("CompanyName","")).strip()
-            change = (latest - prev) / prev if prev > 0 and latest > 0 else 0.0
-            esb_today[sid] = {"name":name8,"latest":latest,"prev":prev,"vol":vol,"change":change,"high":high}
-
-        # 抓近期歷史成交量（用月資料算5日均量）
-        avg5_dict = {}
-        today_dt = datetime.now()
-        for delta in [0, -1]:
-            m = today_dt.month + delta
-            y = today_dt.year
-            if m <= 0: m += 12; y -= 1
-            hist_url = f"https://www.tpex.org.tw/openapi/v1/tpex_esb_every_day_statistics?date={y}{m:02d}"
-            hr8 = requests.get(hist_url, headers=esb_h, timeout=15, verify=False)
-            if hr8.status_code != 200: continue
-            try:
-                hdata = hr8.json()
-                if not isinstance(hdata, list): continue
-                for row in hdata:
-                    sid = str(row.get("SecuritiesCompanyCode","")).strip()
-                    vol = _esb_float(row.get("TransactionVolume",0))
-                    if sid and sid.isdigit():
-                        avg5_dict.setdefault(sid,[]).append(vol / 1000)  # 轉換為張
-            except: continue
-
-        for sid, info in esb_today.items():
-            vol_k = info["vol"] / 1000  # 轉換為張
-            change = info["change"]
-            vols = avg5_dict.get(sid, [])
-            avg5 = sum(vols[-5:]) / len(vols[-5:]) if vols else 0
-
-            # 爆量條件：成交>=500張、漲幅>=30%
-            # 若有均量資料則額外判斷>=10倍均量
-            vol_ok = vol_k >= 500
-            change_ok = change >= 0.30
-            ratio_ok = (avg5 <= 0) or (vol_k >= avg5 * 10)
-
-            if vol_ok and change_ok and ratio_ok:
-                ratio_str = f"{vol_k/avg5:.1f}x" if avg5 > 0 else "-"
-                avg5_str = f"{int(avg5):,}" if avg5 > 0 else "-"
-                s8.append({
-                    "股票代號": sid,
-                    "股票名稱": info["name"],
-                    "收盤價": info["latest"],
-                    "前日均價": info["prev"],
-                    "漲幅": f"{change*100:.1f}%",
-                    "成交張數": f"{int(vol_k):,}",
-                    "5日均量(張)": avg5_str,
-                    "爆量倍數": ratio_str,
-                })
-
-        s8.sort(key=lambda x: float(x["漲幅"].replace("%","")), reverse=True)
-    except Exception as e8:
-        print(f"興櫃爆量錯誤: {e8}")
-        s8 = []
-
-
-    # 策略九：興櫃當天拉回（用公開API抓今日資料）
     s9 = []
-    try:
-        # 重用策略八的今日資料
-        for sid, info in esb_today.items():
-            high = info["high"]
-            latest = info["latest"]
-            prev = info["prev"]
-            if high > 0 and latest > 0:
-                pullback = (high - latest) / high
-                if pullback >= 0.25:
-                    change = info["change"]
-                    s9.append({
-                        "股票代號": sid,
-                        "股票名稱": info["name"],
-                        "今日最高": high,
-                        "現價": latest,
-                        "前日均價": prev,
-                        "拉回幅度": f"{pullback*100:.1f}%",
-                        "漲跌幅": f"{change*100:.1f}%",
-                    })
-        s9.sort(key=lambda x: float(x["拉回幅度"].replace("%","")), reverse=True)
-    except Exception as e9:
-        print(f"興櫃拉回錯誤: {e9}")
-        s9 = []
-
 
     # 策略十：處置股拉回（兩個月內被處置，且連續下跌5天）
     s10 = []
@@ -886,91 +896,8 @@ def get_all_data():
         s10 = []
 
 
-    # 策略十一：興櫃突破平台
-    # 條件：今天漲幅≥10% + 今天股價>前兩天最高 + 前30天高低差≤5%
+
     s11 = []
-    try:
-        def _esb_f(val):
-            s = str(val).replace(",", "").strip()
-            return float(s) if s and s not in ["-", "--", ""] else 0.0
-
-        esb_url11 = "https://www.tpex.org.tw/openapi/v1/tpex_esb_latest_statistics"
-        esb_h11 = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-        r11 = requests.get(esb_url11, headers=esb_h11, timeout=15, verify=False)
-        esb_items11 = r11.json()
-
-        # 整理今日資料
-        esb_today11 = {}
-        for item in esb_items11:
-            sid = str(item.get("SecuritiesCompanyCode","")).strip()
-            if not sid or not sid.isdigit(): continue
-            prev   = _esb_f(item.get("PreviousAveragePrice", 0))
-            latest = _esb_f(item.get("LatestPrice", 0))
-            high   = _esb_f(item.get("Highest", 0))
-            name11 = str(item.get("CompanyName","")).strip()
-            change = (latest - prev) / prev if prev > 0 and latest > 0 else 0.0
-            esb_today11[sid] = {
-                "name": name11, "latest": latest,
-                "prev": prev, "high": high, "change": change
-            }
-
-        # 用 close_3m 抓興櫃歷史資料計算平台
-        start_30d = (today - timedelta(days=45)).strftime("%Y-%m-%d")
-        close_30d = close_df[close_df.index >= pd.to_datetime(start_30d)]
-
-        for sid, info in esb_today11.items():
-            try:
-                latest = info["latest"]
-                change = info["change"]
-
-                # 條件1：今天漲幅≥10%
-                if change < 0.10:
-                    continue
-
-                # 需要歷史資料
-                if sid not in close_30d.columns:
-                    continue
-
-                prices_30d = close_30d[sid].dropna()
-                if len(prices_30d) < 5:
-                    continue
-
-                # 條件2：今天股價 > 前兩天最高
-                prev2_high = prices_30d.iloc[-3:-1].max() if len(prices_30d) >= 3 else 0
-                if latest <= prev2_high:
-                    continue
-
-                # 條件3：前30天（不含今天）高低差≤5%
-                hist_prices = prices_30d.iloc[:-1]  # 不含今天
-                if len(hist_prices) < 5:
-                    continue
-                p_max = hist_prices.max()
-                p_min = hist_prices.min()
-                if p_min <= 0:
-                    continue
-                range_pct = (p_max - p_min) / p_min
-                if range_pct > 0.05:
-                    continue
-
-                s11.append({
-                    "股票代號": sid,
-                    "股票名稱": info["name"],
-                    "今日收盤": latest,
-                    "今日漲幅": f"{change*100:.1f}%",
-                    "前兩天最高": round(prev2_high, 2),
-                    "30日高點": round(p_max, 2),
-                    "30日低點": round(p_min, 2),
-                    "平台區間": f"{range_pct*100:.1f}%",
-                })
-            except:
-                continue
-
-        s11.sort(key=lambda x: float(x["今日漲幅"].replace("%","")), reverse=True)
-
-    except Exception as e:
-        print(f"興櫃突破平台錯誤: {e}")
-        s11 = []
-
 
     # 策略十二：處置股來到月線（兩個月內被處置，股價在20日均線上下3%）
     s12 = []
@@ -994,7 +921,7 @@ def get_all_data():
 
                 diff_pct = (current_price - current_ma20) / current_ma20
 
-                if abs(diff_pct) <= 0.03:
+                if abs(diff_pct) <= 0.06:
                     s12.append({
                         "股票代號": stock_id,
                         "股票名稱": info["name"],
@@ -1012,19 +939,79 @@ def get_all_data():
         print(f"處置股月線錯誤: {e}")
         s12 = []
 
-    # 存進全域供監控頁面使用
-    global _global_s1, _global_s2, _global_s3, _global_s4, _global_s5, _global_s6, _global_s7, _global_s10, _global_s12
-    _global_s1  = s1
-    _global_s2  = s2
-    _global_s3  = s3
-    _global_s4  = s4
-    _global_s5  = s5
-    _global_s6  = s6
-    _global_s7  = s7
-    _global_s10 = s10
-    _global_s12 = s12
+    # 策略十三：20分處置股 - 目前正在被處置，依出關日由近到遠排列
+    s13 = []
+    try:
+        disposal_url_13 = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
+        disposal_res_13 = requests.get(disposal_url_13, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
+        disposal_data_13 = disposal_res_13.json()
 
-    return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12
+        def parse_roc_date(s):
+            try:
+                parts = s.strip().split("/")
+                y = int(parts[0]) + 1911
+                return datetime(y, int(parts[1]), int(parts[2]))
+            except:
+                return None
+
+        today13 = datetime.now().date()
+
+        if disposal_data_13.get("stat") == "OK":
+            for row in disposal_data_13.get("data", []):
+                try:
+                    stock_id   = row[2].strip()
+                    stock_name = row[3].strip()
+                    measure    = row[5].strip() if len(row) > 5 else ""
+                    period     = row[6].strip() if len(row) > 6 else ""
+                    print(f"策略13 {stock_id} measure={repr(measure)} period={repr(period)}")
+
+                    # 只保留20分鐘搓合
+                    if "20" not in measure:
+                        continue
+
+                    sep = "～" if "～" in period else ("~" if "~" in period else "")
+                    end_str   = period.split(sep)[-1].strip() if sep else ""
+                    start_str = period.split(sep)[0].strip() if sep else ""
+                    end_date   = parse_roc_date(end_str)
+                    start_date = parse_roc_date(start_str)
+                    if end_date is None:
+                        continue
+
+                    days_left = (end_date.date() - today13).days
+
+                    if stock_id not in close_3m.columns:
+                        continue
+                    prices = close_3m[stock_id].dropna()
+                    if len(prices) < 10:
+                        continue
+
+                    ma10 = prices.rolling(10).mean()
+                    ma20 = prices.rolling(20).mean()
+                    current_price = round(float(prices.iloc[-1]), 2)
+                    current_ma10  = round(float(ma10.iloc[-1]), 2) if not pd.isna(ma10.iloc[-1]) else None
+                    current_ma20  = round(float(ma20.iloc[-1]), 2) if not pd.isna(ma20.iloc[-1]) else None
+
+                    s13.append({
+                        "股票代號": stock_id,
+                        "股票名稱": stock_name,
+                        "處置期間": period,
+                        "出關日期": end_date.strftime("%Y-%m-%d"),
+                        "剩餘天數": days_left,
+                        "目前股價": current_price,
+                        "10日均線": current_ma10,
+                        "月線(MA20)": current_ma20,
+                        "處置開始日": start_date.strftime("%Y-%m-%d") if start_date else "",
+                    })
+                except:
+                    continue
+
+        s13.sort(key=lambda x: x["剩餘天數"])
+
+    except Exception as e:
+        print(f"策略13失敗: {e}")
+        s13 = []
+
+    return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13
 
 
 
@@ -1035,120 +1022,40 @@ def get_all_data():
 _cache = {"data": None, "time": None}
 _global_disposal_2m = {}
 _global_close_3m = None
-_global_industry_dict = {}
-_global_s1 = []
-_global_s2 = []
-_global_s3 = []
-_global_s4 = []
-_global_s5 = []
-_global_s6 = []
-_global_s7 = []
-_global_s10 = []
-_global_s12 = []
+_cache_lock = __import__("threading").Lock()
+_cache_loading = False
 
-MONITOR_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📡 即時監控總覽</title>
-    <meta http-equiv="refresh" content="300">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
-        .back { display: inline-block; margin-bottom: 16px; color: #38bdf8; text-decoration: none; font-size: 14px; }
-        h1 { font-size: 22px; margin-bottom: 4px; }
-        .subtitle { color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
-        .section { margin-bottom: 32px; }
-        .section-title { font-size: 15px; font-weight: bold; color: #f8fafc; margin-bottom: 10px; padding: 6px 12px; background: #1e293b; border-left: 3px solid #38bdf8; border-radius: 4px; }
-        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 10px; overflow: hidden; font-size: 13px; }
-        thead tr { background: #0f172a; }
-        th { padding: 10px 14px; text-align: left; color: #94a3b8; font-weight: 600; white-space: nowrap; }
-        td { padding: 9px 14px; border-top: 1px solid #334155; white-space: nowrap; }
-        tr:hover td { background: #263548; }
-        .sid { color: #38bdf8; font-weight: bold; }
-        .up { color: #4ade80; font-weight: bold; }
-        .dn { color: #f87171; font-weight: bold; }
-        .flat { color: #94a3b8; }
-        .empty { color: #475569; padding: 16px; text-align: center; }
-        .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 20px; }
-        .countdown { text-align: center; color: #64748b; font-size: 12px; margin-top: 4px; }
-        .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 4px; margin-left: 4px; }
-        .tag-s1 { background:#7c3aed22; color:#a78bfa; border:1px solid #7c3aed44; }
-        .tag-s2 { background:#0369a122; color:#38bdf8; border:1px solid #0369a144; }
-        .tag-s3 { background:#dc262622; color:#f87171; border:1px solid #dc262644; }
-        .tag-s4 { background:#92400e22; color:#fbbf24; border:1px solid #92400e44; }
-        .tag-s5 { background:#16543022; color:#34d399; border:1px solid #16543044; }
-        .tag-s6 { background:#be185d22; color:#f472b6; border:1px solid #be185d44; }
-        .tag-s7 { background:#1e3a5f22; color:#93c5fd; border:1px solid #1e3a5f44; }
-        .tag-s10 { background:#78350f22; color:#fcd34d; border:1px solid #78350f44; }
-        .tag-s12 { background:#14532d22; color:#86efac; border:1px solid #14532d44; }
-    </style>
-    <script>
-        let secs = 300;
-        setInterval(() => {
-            secs--;
-            const el = document.getElementById('cd');
-            if (el) el.textContent = secs + ' 秒後自動刷新';
-            if (secs <= 0) location.reload();
-        }, 1000);
-    </script>
-</head>
-<body>
-    <a href="/" class="back">← 返回首頁</a>
-    <h1>📡 即時監控總覽</h1>
-    <p class="subtitle">整合所有策略股票的即時行情｜每5分鐘自動刷新｜更新時間：{{ update_time }}</p>
+def _refresh_cache():
+    """背景執行緒：下載資料並更新快取"""
+    global _cache_loading
+    try:
+        _cache_loading = True
+        print("背景快取：開始更新資料...")
+        new_data = get_all_data()
+        with _cache_lock:
+            _cache["data"] = new_data
+            _cache["time"] = datetime.now()
+        print("背景快取：更新完成")
+    except Exception as e:
+        print(f"背景快取更新失敗: {e}")
+    finally:
+        _cache_loading = False
 
-    {% if stocks %}
-    <table>
-        <thead>
-            <tr>
-                <th>策略來源</th>
-                <th>股票代號</th>
-                <th>股票名稱</th>
-                <th>產業別</th>
-                <th>昨收</th>
-                <th>即時股價</th>
-                <th>漲跌幅</th>
-                <th>今日最高</th>
-                <th>今日最低</th>
-                <th>資料時間</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s in stocks %}
-            <tr>
-                <td>{% for tag in s['策略來源'] %}<span class="tag tag-{{ tag.cls }}">{{ tag.name }}</span>{% endfor %}</td>
-                <td class="sid">{{ s['股票代號'] }}</td>
-                <td>{{ s['股票名稱'] }}</td>
-                <td>{{ s['產業別'] }}</td>
-                <td>{{ s['昨收'] }}</td>
-                <td class="{{ 'up' if s['漲跌幅'][0] != '-' else 'dn' }}">{{ s['即時股價'] }}</td>
-                <td class="{{ 'up' if s['漲跌幅'][0] != '-' else ('dn' if s['漲跌幅'][0] == '-' else 'flat') }}">{{ s['漲跌幅'] }}</td>
-                <td class="up">{{ s['今日最高'] }}</td>
-                <td class="dn">{{ s['今日最低'] }}</td>
-                <td>{{ s['資料時間'] }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="empty">❌ 目前沒有監控股票，或即時資料尚未載入</div>
-    {% endif %}
-
-    <p class="updated">即時股價來源：證交所／櫃買｜策略資料來源：FinLab</p>
-    <p class="countdown" id="cd">300 秒後自動刷新</p>
-</body>
-</html>
-"""
+def _schedule_refresh():
+    """定時每30分鐘更新一次"""
+    import threading
+    _refresh_cache()
+    t = threading.Timer(1800, _schedule_refresh)
+    t.daemon = True
+    t.start()
 
 def get_cached_data():
-    now = datetime.now()
-    if _cache["data"] is None or (now - _cache["time"]).seconds > 1800:
-        _cache["data"] = get_all_data()
-        _cache["time"] = now
-    return _cache["data"]
+    with _cache_lock:
+        data = _cache["data"]
+    if data is None:
+        # 資料還沒準備好，回傳空的
+        return [], [], [], [], [], [], [], [], [], [], [], [], []
+    return data
 
 @app.route("/strategy/12/realtime")
 def strategy12_realtime():
@@ -1188,11 +1095,10 @@ def strategy12_realtime():
 
             diff_pct = (current_price - ma20) / ma20
 
-            if abs(diff_pct) <= 0.03:
+            if abs(diff_pct) <= 0.06:
                 s12_rt.append({
                     "股票代號": stock_id,
                     "股票名稱": info.get("name", ""),
-                    "產業別": _global_industry_dict.get(stock_id, ""),
                     "處置期間": info.get("period", ""),
                     "即時股價": round(current_price, 2),
                     "20日均線": ma20,
@@ -1207,108 +1113,17 @@ def strategy12_realtime():
 
     return render_template_string(REALTIME_TEMPLATE, stocks=s12_rt, update_time=update_time)
 
-@app.route("/monitor")
-def monitor():
-    """即時監控總覽 - 整合所有策略股票"""
-    get_cached_data()
-    update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # 收集所有策略的股票，去重並記錄來源
-    strategy_tags = [
-        ("s1",  _global_s1,  "二手紅盤",   "股票代號"),
-        ("s2",  _global_s2,  "跌停翻漲停", "股票代號"),
-        ("s3",  _global_s3,  "強勢回檔",   "股票代號"),
-        ("s4",  _global_s4,  "三手紅盤",   "股票代號"),
-        ("s5",  _global_s5,  "四手紅盤",   "股票代號"),
-        ("s6",  _global_s6,  "五手紅盤",   "股票代號"),
-        ("s7",  _global_s7,  "處置跌破線", "股票代號"),
-        ("s10", _global_s10, "處置拉回",   "股票代號"),
-        ("s12", _global_s12, "處置月線",   "股票代號"),
-    ]
-
-    # 整合：同一支股票合併策略標籤
-    stock_map = {}  # {stock_id: {name, tags, prev_close}}
-    for cls, slist, label, key in strategy_tags:
-        seen = set()
-        for item in slist:
-            sid = item.get(key, "")
-            if not sid or sid in seen:
-                continue
-            seen.add(sid)
-            # 取昨收（各策略欄位名不同，依序找）
-            prev = (item.get("第二天收盤") or item.get("收盤價") or
-                    item.get("目前股價") or item.get("第五天收盤") or
-                    item.get("第四天收盤") or item.get("第三天收盤") or 0)
-            if sid not in stock_map:
-                stock_map[sid] = {
-                    "股票名稱": item.get("股票名稱", ""),
-                    "昨收": prev,
-                    "tags": []
-                }
-            stock_map[sid]["tags"].append({"cls": cls, "name": label})
-
-    if not stock_map:
-        return render_template_string(MONITOR_TEMPLATE, stocks=[], update_time=update_time)
-
-    # 抓即時股價
-    all_ids = list(stock_map.keys())
-    realtime = get_realtime_prices(all_ids)
-
-    # 也抓今日最高最低（用 getStockInfo 的 h/l 欄位）
-    high_low = {}
-    import pytz
-    tz_tw = pytz.timezone("Asia/Taipei")
-    now_tw = datetime.now(tz_tw)
-    is_trading = (now_tw.weekday() < 5 and
-                  (9 <= now_tw.hour < 13 or (now_tw.hour == 13 and now_tw.minute <= 30)))
-    # 高低點直接從 Fugle 即時資料取
-    for sid, rt in realtime.items():
-        high_low[sid] = {
-            "high": rt.get("high", "-"),
-            "low":  rt.get("low",  "-"),
-            "prev": rt.get("prev", 0),
-        }
-
-    # 組合結果
-    result = []
-    for sid, info in stock_map.items():
-        rt = realtime.get(sid, {})
-        hl = high_low.get(sid, {})
-        price = rt.get("price", 0)
-        prev = hl.get("prev") or info["昨收"] or 0
-        change_pct = f"{(price - prev)/prev*100:+.1f}%" if price and prev else "-"
-        result.append({
-            "策略來源": info["tags"],
-            "股票代號": sid,
-            "股票名稱": info["股票名稱"],
-            "產業別": _global_industry_dict.get(sid, ""),
-            "昨收": prev if prev else "-",
-            "即時股價": price if price else "-",
-            "漲跌幅": change_pct,
-            "今日最高": hl.get("high", "-"),
-            "今日最低": hl.get("low", "-"),
-            "資料時間": rt.get("time", "盤後"),
-        })
-
-    # 依漲跌幅排序（漲最多在前）
-    def sort_key(x):
-        try:
-            return -float(x["漲跌幅"].replace("%","").replace("+",""))
-        except:
-            return 0
-    result.sort(key=sort_key)
-
-    return render_template_string(MONITOR_TEMPLATE, stocks=result, update_time=update_time)
-
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9), len(s10), len(s11), len(s12)], update_time=update_time)
+    if all(len(x) == 0 for x in [s1, s2, s3, s4, s5, s6, s7, s10, s12, s13]) and _cache_loading:
+        return "<html><body style='background:#0f172a;color:#e2e8f0;font-family:Microsoft JhengHei;padding:60px;text-align:center'><h2>⏳ 資料載入中，請稍候1~2分鐘後重新整理...</h2></body></html>"
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), 0, 0, len(s10), 0, len(s12), len(s13)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
@@ -1324,17 +1139,11 @@ def strategy(sid):
             "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
-        7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，處置期間內每次收盤價跌破10日均線皆列出，依股票代號與日期排序",
-            "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "跌破日期", "收盤價", "10日均線", "跌破幅度"]},
-        8: {"title": "興櫃爆量強漲", "icon": "🚀", "desc": "興櫃股票當日成交量≥5日均量10倍、成交≥500張、漲幅≥30%，依漲幅由高到低排列",
-            "stocks": s8, "columns": ["股票代號", "股票名稱", "收盤價", "前日均價", "漲幅", "成交張數", "5日均量(張)", "爆量倍數"]},
-        9: {"title": "興櫃當天拉回", "icon": "📉", "desc": "興櫃股票當天從最高點拉回幅度≥25%，拉回最多的在前",
-            "stocks": s9, "columns": ["股票代號", "股票名稱", "今日最高", "現價", "前日均價", "拉回幅度", "漲跌幅"]},
+        7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，且目前收盤價跌破10日均線，每支只列一筆，跌破幅度最大的在前",
+            "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "目前收盤價", "10日均線", "跌破幅度"]},
         10: {"title": "處置股拉回", "icon": "🔻", "desc": "兩個月內曾被處置的股票，連續下跌5天，跌最多的在前",
             "stocks": s10, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "5日前股價", "5日跌幅", "最近下跌日"]},
-        11: {"title": "興櫃突破平台", "icon": "🚀", "desc": "今天漲幅≥10%、突破前兩天高點、前30天盤整區間≤5%，依漲幅排序",
-            "stocks": s11, "columns": ["股票代號", "股票名稱", "今日收盤", "今日漲幅", "前兩天最高", "30日高點", "30日低點", "平台區間"]},
-        12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下3%以內，偏離最小的在前",
+        12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下6%以內，偏離最小的在前",
             "stocks": s12, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "20日均線", "偏離幅度"]},
     }
 
@@ -1343,6 +1152,178 @@ def strategy(sid):
 
     s = strategies[sid]
     return render_template_string(DETAIL_TEMPLATE, update_time=update_time, **s)
+
+
+STRATEGY13_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⏳ 20分處置股</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Microsoft JhengHei', sans-serif; background: #0f172a; color: #e2e8f0; padding: 30px; }
+        .back { display: inline-block; margin-bottom: 20px; color: #38bdf8; text-decoration: none; font-size: 14px; }
+        .back:hover { text-decoration: underline; }
+        h1 { font-size: 22px; margin-bottom: 6px; color: #f8fafc; }
+        .subtitle { color: #94a3b8; font-size: 13px; margin-bottom: 24px; }
+        .stat-box { display: inline-block; background: #1e293b; border-radius: 10px; padding: 8px 20px; margin-bottom: 20px; }
+        .stat-box .num { font-size: 22px; font-weight: bold; color: #38bdf8; }
+        .stat-box .label { font-size: 12px; color: #94a3b8; }
+        .cards { display: flex; flex-direction: column; gap: 24px; }
+        .card { background: #1e293b; border-radius: 14px; padding: 20px 24px; border: 1px solid #334155; }
+        .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+        .card-title { font-size: 17px; font-weight: bold; color: #f1f5f9; }
+        .badge-days { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .badge-urgent { background: #4c1d1d; color: #f87171; }
+        .badge-soon { background: #3d2c00; color: #fbbf24; }
+        .badge-ok { background: #1a3a2a; color: #4ade80; }
+        .info-row { display: flex; gap: 24px; margin-bottom: 14px; flex-wrap: wrap; }
+        .info-item { font-size: 13px; color: #94a3b8; }
+        .info-item span { color: #e2e8f0; font-weight: bold; }
+        .chart-container { position: relative; height: 220px; background: #0f172a; border-radius: 10px; padding: 10px; }
+        canvas { width: 100% !important; }
+        .empty { text-align: center; color: #94a3b8; padding: 40px; background: #1e293b; border-radius: 12px; }
+        .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 20px; }
+        .disposal-start-line { color: #f87171; font-size: 12px; margin-top: 6px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+    <a class="back" href="/">← 返回首頁</a>
+    <h1>⏳ 20分處置股</h1>
+    <p class="subtitle">目前正在被處置的股票（僅限20分鐘搓合），依出關日由近到遠排列。圖表顯示處置前5天＋處置期間走勢，含10日線（橘）與月線（藍）。</p>
+    <div class="stat-box"><div class="num">{{ stocks|length }}</div><div class="label">目前處置中股票數</div></div>
+
+    {% if stocks %}
+    <div class="cards">
+    {% for s in stocks %}
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">{{ s.股票代號 }} {{ s.股票名稱 }}</div>
+            <span class="badge-days {% if s.剩餘天數 <= 3 %}badge-urgent{% elif s.剩餘天數 <= 7 %}badge-soon{% else %}badge-ok{% endif %}">
+                出關：{{ s.出關日期 }}（剩 {{ s.剩餘天數 }} 天）
+            </span>
+        </div>
+        <div class="info-row">
+            <div class="info-item">處置期間 <span>{{ s.處置期間 }}</span></div>
+            <div class="info-item">目前股價 <span>{{ s.目前股價 }}</span></div>
+            {% if s["10日均線"] %}<div class="info-item">10日線 <span style="color:#fb923c;">{{ s["10日均線"] }}</span></div>{% endif %}
+            {% if s["月線(MA20)"] %}<div class="info-item">月線 <span style="color:#60a5fa;">{{ s["月線(MA20)"] }}</span></div>{% endif %}
+        </div>
+        <div class="chart-container">
+            <canvas id="chart_{{ loop.index }}"></canvas>
+        </div>
+        {% if s.chart_data %}
+        <script>
+        (function(){
+            var cd = {{ s.chart_data | tojson }};
+            var ctx = document.getElementById("chart_{{ loop.index }}").getContext("2d");
+            new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: cd.labels,
+                    datasets: [
+                        { label: "收盤價", data: cd.close, borderColor: "#e2e8f0", borderWidth: 2, pointRadius: 3, pointBackgroundColor: "#e2e8f0", tension: 0.2, fill: false },
+                        { label: "10日線", data: cd.ma10, borderColor: "#fb923c", borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, borderDash: [] },
+                        { label: "月線MA20", data: cd.ma20, borderColor: "#60a5fa", borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, borderDash: [] }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: { labels: { color: "#94a3b8", font: { size: 11 } } },
+                    },
+                    scales: {
+                        x: { ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 45 }, grid: { color: "#1e293b" } },
+                        y: { ticks: { color: "#64748b", font: { size: 10 } }, grid: { color: "#334155" } }
+                    }
+                }
+            });
+        })();
+        </script>
+        {% endif %}
+    </div>
+    {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">❌ 目前沒有正在被處置的股票</div>
+    {% endif %}
+    <p class="updated">更新時間：{{ update_time }}</p>
+</body>
+</html>
+"""
+
+@app.route("/strategy/13")
+def strategy13():
+    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
+    update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    close_3m = _global_close_3m
+
+    # 為每支股票準備走勢圖資料（處置前5天 + 處置期間）
+    for s in s13:
+        try:
+            stock_id = s["股票代號"]
+            if close_3m is None or stock_id not in close_3m.columns:
+                s["chart_data"] = None
+                continue
+
+            prices = close_3m[stock_id].dropna()
+            prices.index = pd.to_datetime(prices.index)
+
+            # 找處置開始日
+            start_dt = pd.to_datetime(s["處置開始日"]) if s["處置開始日"] else None
+            end_dt   = pd.to_datetime(s["出關日期"])
+
+            # 用完整歷史資料算MA，確保每個點都有值
+            ma10_full = prices.rolling(10).mean()
+            ma20_full = prices.rolling(20).mean()
+
+            # 找顯示範圍：處置前5天到今天
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            if start_dt is not None:
+                pre_idx = prices.index.searchsorted(start_dt)
+                pre_start_idx = max(0, pre_idx - 5)
+            else:
+                pre_start_idx = max(0, len(prices) - 40)
+
+            chart_prices = prices.iloc[pre_start_idx:]
+            chart_prices = chart_prices[chart_prices.index <= today_str]
+            chart_ma10   = ma10_full.iloc[pre_start_idx:][ma10_full.iloc[pre_start_idx:].index <= today_str]
+            chart_ma20   = ma20_full.iloc[pre_start_idx:][ma20_full.iloc[pre_start_idx:].index <= today_str]
+
+            if len(chart_prices) < 2:
+                s["chart_data"] = None
+                continue
+
+            disposal_start_idx = None
+            if start_dt is not None:
+                for i, d in enumerate(chart_prices.index):
+                    if d >= start_dt:
+                        disposal_start_idx = i
+                        break
+
+            def to_list(series):
+                return [round(v, 2) if not pd.isna(v) else None for v in series]
+
+            s["chart_data"] = {
+                "labels": [d.strftime("%m/%d") for d in chart_prices.index],
+                "close":  to_list(chart_prices),
+                "ma10":   to_list(chart_ma10),
+                "ma20":   to_list(chart_ma20),
+                "disposal_start_idx": disposal_start_idx,
+            }
+        except Exception as e:
+            s["chart_data"] = None
+
+    return render_template_string(STRATEGY13_TEMPLATE, stocks=s13, update_time=update_time)
+
+# 啟動時在背景開始下載資料（gunicorn 也會執行這段）
+import threading as _threading
+_bg_thread = _threading.Thread(target=_schedule_refresh, daemon=True)
+_bg_thread.start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
