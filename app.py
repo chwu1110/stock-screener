@@ -1287,25 +1287,34 @@ def debug13():
         result["twse_sample_row0"] = twse_data.get("data", [[]])[0] if twse_data.get("data") else []
     except Exception as e:
         result["twse_error"] = str(e)
+    # 看 disposal_history.json 的內容
     try:
-        import finlab as _finlab
-        _finlab.login(FINLAB_API_KEY)
-        from finlab import data as _fdata
-        # 試著找處置股相關資料集
-        disposal_datasets = []
-        try:
-            d = _fdata.get("etl:disposal")
-            disposal_datasets.append({"name": "etl:disposal", "shape": str(d.shape), "columns": list(d.columns)[:5], "sample": str(d.tail(2).to_dict())[:300]})
-        except Exception as e:
-            disposal_datasets.append({"name": "etl:disposal", "error": str(e)})
-        try:
-            d2 = _fdata.get("price_earning_ratio:處置")
-            disposal_datasets.append({"name": "price_earning_ratio:處置", "shape": str(d2.shape)})
-        except Exception as e:
-            disposal_datasets.append({"name": "price_earning_ratio:處置", "error": str(e)})
-        result["finlab_disposal_test"] = disposal_datasets
+        import os as _os, json as _json2
+        history_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "disposal_history.json")
+        result["history_file_exists"] = _os.path.exists(history_path)
+        if _os.path.exists(history_path):
+            with open(history_path, "r", encoding="utf-8") as f:
+                hist = _json2.load(f)
+            dates = sorted(hist.keys())
+            result["history_date_count"] = len(dates)
+            result["history_latest_date"] = dates[-1] if dates else None
+            result["history_oldest_date"] = dates[0] if dates else None
+            # 看最新一天的資料長什麼樣
+            if dates:
+                latest = hist[dates[-1]]
+                result["history_latest_count"] = len(latest)
+                sample_key = list(latest.keys())[0] if latest else None
+                result["history_sample"] = {sample_key: latest[sample_key]} if sample_key else {}
     except Exception as e:
-        result["finlab_error"] = str(e)
+        result["history_error"] = str(e)
+    
+    # 看 _global_disposal_2m 的內容
+    try:
+        result["disposal_2m_count"] = len(_global_disposal_2m)
+        sample_keys = list(_global_disposal_2m.keys())[:3]
+        result["disposal_2m_sample"] = {k: _global_disposal_2m[k] for k in sample_keys}
+    except Exception as e:
+        result["disposal_2m_error"] = str(e)
     return _json.dumps(result, ensure_ascii=False, indent=2), 200, {"Content-Type": "application/json"}
 
 @app.route("/strategy/13")
