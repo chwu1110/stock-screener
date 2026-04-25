@@ -1292,14 +1292,42 @@ STRATEGY13_TEMPLATE = """
         (function(){
             var cd = {{ s.chart_data | tojson }};
             var ctx = document.getElementById("chart_{{ loop.index }}").getContext("2d");
+
+            // 每個點的顏色：低於10日線或月線 → 紅點，否則白點
+            var pointColors = cd.close.map(function(c, i) {
+                if (c === null) return "#e2e8f0";
+                var below10 = cd.ma10[i] !== null && c < cd.ma10[i];
+                var below20 = cd.ma20[i] !== null && c < cd.ma20[i];
+                if (below10 || below20) return "#f87171";  // 紅
+                return "#e2e8f0";  // 白
+            });
+
+            var pointRadii = cd.close.map(function(c, i) {
+                if (c === null) return 3;
+                var below10 = cd.ma10[i] !== null && c < cd.ma10[i];
+                var below20 = cd.ma20[i] !== null && c < cd.ma20[i];
+                return (below10 || below20) ? 6 : 3;  // 紅點大一點
+            });
+
             new Chart(ctx, {
                 type: "line",
                 data: {
                     labels: cd.labels,
                     datasets: [
-                        { label: "收盤價", data: cd.close, borderColor: "#e2e8f0", borderWidth: 2, pointRadius: 4, pointBackgroundColor: "#e2e8f0", pointHoverRadius: 6, tension: 0.2, fill: false },
-                        { label: "10日線", data: cd.ma10, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false, hidden: false },
-                        { label: "月線MA20", data: cd.ma20, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false, hidden: false }
+                        {
+                            label: "收盤價",
+                            data: cd.close,
+                            borderColor: "#e2e8f0",
+                            borderWidth: 2,
+                            pointRadius: pointRadii,
+                            pointBackgroundColor: pointColors,
+                            pointBorderColor: pointColors,
+                            pointHoverRadius: 7,
+                            tension: 0.2,
+                            fill: false
+                        },
+                        { label: "10日線", data: cd.ma10, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false },
+                        { label: "月線MA20", data: cd.ma20, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false }
                     ]
                 },
                 options: {
@@ -1313,10 +1341,13 @@ STRATEGY13_TEMPLATE = """
                                 label: function(item) { return null; },
                                 afterBody: function(items) {
                                     var idx = items[0].dataIndex;
+                                    var c = cd.close[idx];
+                                    var m10 = cd.ma10[idx];
+                                    var m20 = cd.ma20[idx];
                                     var lines = [];
-                                    lines.push("收盤價：" + (cd.close[idx] !== null ? cd.close[idx] : "-"));
-                                    lines.push("10日線：" + (cd.ma10[idx] !== null ? cd.ma10[idx] : "-"));
-                                    lines.push("月線MA20：" + (cd.ma20[idx] !== null ? cd.ma20[idx] : "-"));
+                                    lines.push("收盤價：" + (c !== null ? c : "-"));
+                                    lines.push("10日線：" + (m10 !== null ? m10 : "-") + (m10 !== null && c !== null && c < m10 ? " ⚠️" : ""));
+                                    lines.push("月線MA20：" + (m20 !== null ? m20 : "-") + (m20 !== null && c !== null && c < m20 ? " ⚠️" : ""));
                                     return lines;
                                 }
                             },
