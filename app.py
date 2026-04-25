@@ -1287,18 +1287,25 @@ def debug13():
         result["twse_sample_row0"] = twse_data.get("data", [[]])[0] if twse_data.get("data") else []
     except Exception as e:
         result["twse_error"] = str(e)
-    otc_urls = [
-        "https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
-        "https://www.tpex.org.tw/web/bulletin/disposal/disposal_download.php?l=zh-tw&o=json",
-        "https://www.tpex.org.tw/rwd/zh/bulletin/disposal?response=json",
-        "https://www.tpex.org.tw/web/bulletin/disposal/index.php?l=zh-tw&o=json",
-    ]
-    for otc_url in otc_urls:
+    try:
+        import finlab as _finlab
+        _finlab.login(FINLAB_API_KEY)
+        from finlab import data as _fdata
+        # 試著找處置股相關資料集
+        disposal_datasets = []
         try:
-            otc_res = requests.get(otc_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8, verify=False)
-            result[f"otc_{otc_url[-30:]}"] = {"status": otc_res.status_code, "preview": otc_res.text[:200]}
+            d = _fdata.get("etl:disposal")
+            disposal_datasets.append({"name": "etl:disposal", "shape": str(d.shape), "columns": list(d.columns)[:5], "sample": str(d.tail(2).to_dict())[:300]})
         except Exception as e:
-            result[f"otc_{otc_url[-30:]}"] = {"error": str(e)}
+            disposal_datasets.append({"name": "etl:disposal", "error": str(e)})
+        try:
+            d2 = _fdata.get("price_earning_ratio:處置")
+            disposal_datasets.append({"name": "price_earning_ratio:處置", "shape": str(d2.shape)})
+        except Exception as e:
+            disposal_datasets.append({"name": "price_earning_ratio:處置", "error": str(e)})
+        result["finlab_disposal_test"] = disposal_datasets
+    except Exception as e:
+        result["finlab_error"] = str(e)
     return _json.dumps(result, ensure_ascii=False, indent=2), 200, {"Content-Type": "application/json"}
 
 @app.route("/strategy/13")
