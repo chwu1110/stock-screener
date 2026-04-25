@@ -1032,7 +1032,6 @@ def get_all_data():
         print(f"策略13 OTC 失敗: {e}")
 
     s13.sort(key=lambda x: x["剩餘天數"])
-        s13 = []
 
     return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13
 
