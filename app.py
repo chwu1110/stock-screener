@@ -1297,16 +1297,36 @@ STRATEGY13_TEMPLATE = """
                 data: {
                     labels: cd.labels,
                     datasets: [
-                        { label: "收盤價", data: cd.close, borderColor: "#e2e8f0", borderWidth: 2, pointRadius: 3, pointBackgroundColor: "#e2e8f0", tension: 0.2, fill: false },
-                        { label: "10日線", data: cd.ma10, borderColor: "#fb923c", borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, borderDash: [] },
-                        { label: "月線MA20", data: cd.ma20, borderColor: "#60a5fa", borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false, borderDash: [] }
+                        { label: "收盤價", data: cd.close, borderColor: "#e2e8f0", borderWidth: 2, pointRadius: 4, pointBackgroundColor: "#e2e8f0", pointHoverRadius: 6, tension: 0.2, fill: false },
+                        { label: "10日線", data: cd.ma10, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false, hidden: false },
+                        { label: "月線MA20", data: cd.ma20, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false, hidden: false }
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     animation: false,
                     plugins: {
-                        legend: { labels: { color: "#94a3b8", font: { size: 11 } } },
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: function(items) { return items[0].label; },
+                                label: function(item) { return null; },
+                                afterBody: function(items) {
+                                    var idx = items[0].dataIndex;
+                                    var lines = [];
+                                    lines.push("收盤價：" + (cd.close[idx] !== null ? cd.close[idx] : "-"));
+                                    lines.push("10日線：" + (cd.ma10[idx] !== null ? cd.ma10[idx] : "-"));
+                                    lines.push("月線MA20：" + (cd.ma20[idx] !== null ? cd.ma20[idx] : "-"));
+                                    return lines;
+                                }
+                            },
+                            backgroundColor: "#1e293b",
+                            titleColor: "#94a3b8",
+                            bodyColor: "#e2e8f0",
+                            borderColor: "#334155",
+                            borderWidth: 1,
+                            padding: 10
+                        }
                     },
                     scales: {
                         x: { ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 45 }, grid: { color: "#1e293b" } },
