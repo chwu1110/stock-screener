@@ -1271,6 +1271,33 @@ STRATEGY13_TEMPLATE = """
 </html>
 """
 
+
+@app.route("/debug/13")
+def debug13():
+    import json as _json
+    result = {}
+    try:
+        twse_res = requests.get("https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
+                                headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
+        twse_data = twse_res.json()
+        result["twse_stat"] = twse_data.get("stat")
+        result["twse_total_rows"] = len(twse_data.get("data", []))
+        count_20 = sum(1 for r in twse_data.get("data", []) if len(r) > 8 and "二十分鐘" in str(r[8]))
+        result["twse_20min_count"] = count_20
+        result["twse_sample_row0"] = twse_data.get("data", [[]])[0] if twse_data.get("data") else []
+    except Exception as e:
+        result["twse_error"] = str(e)
+    try:
+        otc_res = requests.get("https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
+                               headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
+        otc_json = otc_res.json()
+        otc_rows = otc_json.get("aaData", otc_json.get("data", []))
+        result["otc_total_rows"] = len(otc_rows)
+        result["otc_sample_row0"] = otc_rows[0] if otc_rows else []
+    except Exception as e:
+        result["otc_error"] = str(e)
+    return _json.dumps(result, ensure_ascii=False, indent=2), 200, {"Content-Type": "application/json"}
+
 @app.route("/strategy/13")
 def strategy13():
     s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
