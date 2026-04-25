@@ -961,12 +961,11 @@ def get_all_data():
                 try:
                     stock_id   = row[2].strip()
                     stock_name = row[3].strip()
-                    measure    = row[5].strip() if len(row) > 5 else ""
                     period     = row[6].strip() if len(row) > 6 else ""
-                    print(f"策略13 {stock_id} measure={repr(measure)} period={repr(period)}")
+                    content    = row[8].strip() if len(row) > 8 else ""
 
-                    # 只保留20分鐘搓合
-                    if "20" not in measure:
+                    # 只保留20分鐘搓合（判斷處置內容欄位）
+                    if "二十分鐘" not in content:
                         continue
 
                     sep = "～" if "～" in period else ("~" if "~" in period else "")
