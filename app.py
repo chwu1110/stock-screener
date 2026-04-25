@@ -1360,11 +1360,24 @@ def debug13():
             result["stockwarden_sample"] = sw_raw[:2]
         elif isinstance(sw_raw, dict):
             result["stockwarden_keys"] = list(sw_raw.keys())
-            # 找哪個key是資料
-            for k, v in sw_raw.items():
-                if isinstance(v, list) and len(v) > 0:
-                    result[f"stockwarden_{k}_count"] = len(v)
-                    result[f"stockwarden_{k}_sample"] = v[:2]
+            data_val = sw_raw.get("data")
+            result["stockwarden_data_type"] = str(type(data_val))
+            if isinstance(data_val, list):
+                result["stockwarden_data_count"] = len(data_val)
+                result["stockwarden_data_sample"] = data_val[:2]
+            elif isinstance(data_val, dict):
+                result["stockwarden_data_keys"] = list(data_val.keys())[:10]
+                # 取第一個key的值
+                first_key = list(data_val.keys())[0] if data_val else None
+                if first_key:
+                    result["stockwarden_data_first_key"] = first_key
+                    result["stockwarden_data_first_val"] = str(data_val[first_key])[:500]
+                # 找最新的key（可能是日期）
+                sorted_keys = sorted(data_val.keys())
+                last_key = sorted_keys[-1] if sorted_keys else None
+                if last_key:
+                    result["stockwarden_data_last_key"] = last_key
+                    result["stockwarden_data_last_val"] = data_val[last_key]
         else:
             result["stockwarden_raw_preview"] = str(sw_raw)[:500]
     except Exception as e:
