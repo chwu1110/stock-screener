@@ -1353,9 +1353,20 @@ def debug13():
     try:
         sw_res = requests.get("https://storage.googleapis.com/stockwarden-prod-public/api/dispositions.json",
                               headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        sw_data = sw_res.json()
-        result["stockwarden_count"] = len(sw_data)
-        result["stockwarden_sample"] = sw_data[:2] if sw_data else []
+        sw_raw = sw_res.json()
+        result["stockwarden_type"] = str(type(sw_raw))
+        if isinstance(sw_raw, list):
+            result["stockwarden_count"] = len(sw_raw)
+            result["stockwarden_sample"] = sw_raw[:2]
+        elif isinstance(sw_raw, dict):
+            result["stockwarden_keys"] = list(sw_raw.keys())
+            # 找哪個key是資料
+            for k, v in sw_raw.items():
+                if isinstance(v, list) and len(v) > 0:
+                    result[f"stockwarden_{k}_count"] = len(v)
+                    result[f"stockwarden_{k}_sample"] = v[:2]
+        else:
+            result["stockwarden_raw_preview"] = str(sw_raw)[:500]
     except Exception as e:
         result["stockwarden_error"] = str(e)
 
