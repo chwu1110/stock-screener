@@ -1356,30 +1356,14 @@ def strategy13():
     close_3m = _global_close_3m
 
     # 為每支股票準備走勢圖資料（處置前5天 + 處置期間）
-    # 另外抓6個月資料確保MA計算正確
-    try:
-        import finlab as _fl2
-        _fl2.login(FINLAB_API_KEY)
-        from finlab import data as _fd2
-        _today = datetime.now()
-        _start_6m = (_today - timedelta(days=180)).strftime("%Y-%m-%d")
-        _fd2.date_range = (_start_6m, _today.strftime("%Y-%m-%d"))
-        _close_6m_raw = _fd2.get("price:收盤價")
-        _close_6m = pd.DataFrame(_close_6m_raw.values, index=pd.to_datetime(_close_6m_raw.index.astype(str)), columns=_close_6m_raw.columns)
-    except:
-        _close_6m = close_3m  # fallback
-
     for s in s13:
         try:
             stock_id = s["股票代號"]
-            # 優先用6個月資料，沒有就用3個月
-            if _close_6m is not None and stock_id in _close_6m.columns:
-                prices = _close_6m[stock_id].dropna()
-            elif close_3m is not None and stock_id in close_3m.columns:
-                prices = close_3m[stock_id].dropna()
-            else:
+            if close_3m is None or stock_id not in close_3m.columns:
                 s["chart_data"] = None
                 continue
+
+            prices = close_3m[stock_id].dropna()
 
             prices.index = pd.to_datetime(prices.index)
 
