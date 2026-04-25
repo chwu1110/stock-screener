@@ -1004,26 +1004,60 @@ def get_all_data():
                 continue
 
     try:
+        # 主要來源：TWSE 即時 API（上市）
         twse_res = requests.get("https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
                                 headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
         twse_data = twse_res.json()
-        print(f"策略13 TWSE stat={twse_data.get('stat')} rows={len(twse_data.get('data', []))}")
         if twse_data.get("stat") == "OK":
             process_disposal_rows_13(twse_data.get("data", []))
     except Exception as e:
         print(f"策略13 TWSE 失敗: {e}")
 
+    # 補充來源：disposal_history 裡有 is_20min 標記的上櫃股票
     try:
-        otc_res = requests.get("https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
-                               headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-        otc_json = otc_res.json()
-        otc_rows = otc_json.get("aaData", otc_json.get("data", []))
-        print(f"策略13 OTC rows={len(otc_rows)}")
-        process_disposal_rows_13(otc_rows)
+        today13 = datetime.now().date()
+        for stock_id, info in _global_disposal_2m.items():
+            if stock_id in s13_seen:
+                continue
+            if not info.get("is_20min", False):
+                continue
+            # 判斷是否還在處置期間內
+            period = info.get("period", "")
+            sep = "～" if "～" in period else ("~" if "~" in period else "")
+            end_str = period.split(sep)[-1].strip() if sep else ""
+            start_str = period.split(sep)[0].strip() if sep else ""
+            end_date = parse_roc_date_13(end_str)
+            start_date = parse_roc_date_13(start_str)
+            if end_date is None:
+                continue
+            if end_date.date() < today13:
+                continue  # 已出關
+            days_left = (end_date.date() - today13).days
+            if stock_id not in close_3m.columns:
+                continue
+            prices = close_3m[stock_id].dropna()
+            if len(prices) < 10:
+                continue
+            ma10 = prices.rolling(10).mean()
+            ma20 = prices.rolling(20).mean()
+            current_price = round(float(prices.iloc[-1]), 2)
+            current_ma10  = round(float(ma10.iloc[-1]), 2) if not pd.isna(ma10.iloc[-1]) else None
+            current_ma20  = round(float(ma20.iloc[-1]), 2) if not pd.isna(ma20.iloc[-1]) else None
+            s13.append({
+                "股票代號": stock_id,
+                "股票名稱": info["name"],
+                "處置期間": period,
+                "出關日期": end_date.strftime("%Y-%m-%d"),
+                "剩餘天數": days_left,
+                "目前股價": current_price,
+                "10日均線": current_ma10,
+                "月線(MA20)": current_ma20,
+                "處置開始日": start_date.strftime("%Y-%m-%d") if start_date else "",
+            })
+            s13_seen.add(stock_id)
     except Exception as e:
-        print(f"策略13 OTC 失敗: {e}")
+        print(f"策略13 OTC補充失敗: {e}")
 
-    print(f"策略13 最終筆數: {len(s13)}")
     s13.sort(key=lambda x: x["剩餘天數"])
 
     return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13
