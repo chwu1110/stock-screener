@@ -529,14 +529,13 @@ def get_all_data():
     except Exception as e:
         print(f"讀取處置股歷史失敗: {e}")
 
-    # 整合兩個月內的歷史處置股
+    # 整合兩個月內的歷史處置股（由舊到新排序，後面覆蓋前面，確保取到最新含is_20min的記錄）
     two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
     disposal_stocks_2m = {}
-    for date_str, stocks in disposal_history.items():
+    for date_str in sorted(disposal_history.keys()):
         if date_str >= two_months_ago:
-            for sid, info in stocks.items():
-                if sid not in disposal_stocks_2m:
-                    disposal_stocks_2m[sid] = info
+            for sid, info in disposal_history[date_str].items():
+                disposal_stocks_2m[sid] = info  # 永遠用最新的覆蓋
     print(f"兩個月內處置股數: {len(disposal_stocks_2m)}, 含7721: {'7721' in disposal_stocks_2m}")
 
     # 存進全域，供即時策略12使用
