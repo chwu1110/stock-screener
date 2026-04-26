@@ -579,10 +579,26 @@ def get_all_data():
         low_ = data.get("price:最低價")
         low_df = pd.DataFrame(low_.values, index=pd.to_datetime(low_.index.astype(str)), columns=low_.columns)
         low_1m = low_df[low_df.index >= pd.to_datetime(start_1m)]
+        low_3m = low_df[low_df.index >= pd.to_datetime(start_3m)]
         print("Daily usage: -- price:最低價 載入完成")
     except Exception as e:
         print(f"price:最低價 載入失敗，改用開盤價判斷: {e}")
         low_1m = None
+        low_3m = None
+
+    try:
+        high_ = data.get("price:最高價")
+        high_df = pd.DataFrame(high_.values, index=pd.to_datetime(high_.index.astype(str)), columns=high_.columns)
+        high_3m = high_df[high_df.index >= pd.to_datetime(start_3m)]
+        print("Daily usage: -- price:最高價 載入完成")
+    except Exception as e:
+        print(f"price:最高價 載入失敗: {e}")
+        high_3m = None
+
+    global _global_open_3m, _global_high_3m, _global_low_3m
+    _global_open_3m = open_df[open_df.index >= pd.to_datetime(start_3m)]
+    _global_high_3m = high_3m
+    _global_low_3m  = low_3m
 
     def gap_stars(stock, dates):
         """判斷是否為跳空漲停（一價到底）：開盤＝漲停價 且 最低＝漲停價"""
@@ -1110,6 +1126,9 @@ def get_all_data():
 _cache = {"data": None, "time": None}
 _global_disposal_2m = {}
 _global_close_3m = None
+_global_open_3m = None
+_global_high_3m = None
+_global_low_3m = None
 _cache_lock = __import__("threading").Lock()
 _cache_loading = False
 
@@ -1307,79 +1326,171 @@ STRATEGY13_TEMPLATE = """
         <script>
         (function(){
             var cd = {{ s.chart_data | tojson }};
-            var ctx = document.getElementById("chart_{{ loop.index }}").getContext("2d");
+            var canvas = document.getElementById("chart_{{ loop.index }}");
+            var ctx = canvas.getContext("2d");
+            var W = canvas.offsetWidth || canvas.parentElement.offsetWidth || 900;
+            var H = 260;
+            canvas.width = W;
+            canvas.height = H;
 
-            // 每個點的顏色：低於10日線或月線 → 紅點，否則白點
-            var pointColors = cd.close.map(function(c, i) {
-                if (c === null) return "#e2e8f0";
-                var below10 = cd.ma10[i] !== null && c < cd.ma10[i];
-                var below20 = cd.ma20[i] !== null && c < cd.ma20[i];
-                if (below10 || below20) return "#f87171";  // 紅
-                return "#e2e8f0";  // 白
-            });
+            var n = cd.labels.length;
+            var padL = 55, padR = 10, padT = 15, padB = 40;
+            var chartW = W - padL - padR;
+            var chartH = H - padT - padB;
 
-            var pointRadii = cd.close.map(function(c, i) {
-                if (c === null) return 3;
-                var below10 = cd.ma10[i] !== null && c < cd.ma10[i];
-                var below20 = cd.ma20[i] !== null && c < cd.ma20[i];
-                return (below10 || below20) ? 6 : 3;  // 紅點大一點
-            });
+            // 計算Y軸範圍
+            var vals = [];
+            cd.close.forEach(function(v){if(v)vals.push(v);});
+            cd.high.forEach(function(v){if(v)vals.push(v);});
+            cd.low.forEach(function(v){if(v)vals.push(v);});
+            cd.ma10.forEach(function(v){if(v)vals.push(v);});
+            cd.ma20.forEach(function(v){if(v)vals.push(v);});
+            var yMin = Math.min.apply(null, vals) * 0.995;
+            var yMax = Math.max.apply(null, vals) * 1.005;
+            var yRange = yMax - yMin;
 
-            new Chart(ctx, {
-                type: "line",
-                data: {
-                    labels: cd.labels,
-                    datasets: [
-                        {
-                            label: "收盤價",
-                            data: cd.close,
-                            borderColor: "#e2e8f0",
-                            borderWidth: 2,
-                            pointRadius: pointRadii,
-                            pointBackgroundColor: pointColors,
-                            pointBorderColor: pointColors,
-                            pointHoverRadius: 7,
-                            tension: 0.2,
-                            fill: false
-                        },
-                        { label: "10日線", data: cd.ma10, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false },
-                        { label: "月線MA20", data: cd.ma20, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    animation: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                title: function(items) { return items[0].label; },
-                                label: function(item) { return null; },
-                                afterBody: function(items) {
-                                    var idx = items[0].dataIndex;
-                                    var c = cd.close[idx];
-                                    var m10 = cd.ma10[idx];
-                                    var m20 = cd.ma20[idx];
-                                    var lines = [];
-                                    lines.push("收盤價：" + (c !== null ? c : "-"));
-                                    lines.push("10日線：" + (m10 !== null ? m10 : "-") + (m10 !== null && c !== null && c < m10 ? " ⚠️" : ""));
-                                    lines.push("月線MA20：" + (m20 !== null ? m20 : "-") + (m20 !== null && c !== null && c < m20 ? " ⚠️" : ""));
-                                    return lines;
-                                }
-                            },
-                            backgroundColor: "#1e293b",
-                            titleColor: "#94a3b8",
-                            bodyColor: "#e2e8f0",
-                            borderColor: "#334155",
-                            borderWidth: 1,
-                            padding: 10
-                        }
-                    },
-                    scales: {
-                        x: { ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 45 }, grid: { color: "#1e293b" } },
-                        y: { ticks: { color: "#64748b", font: { size: 10 } }, grid: { color: "#334155" } }
-                    }
+            function xPos(i){ return padL + (i + 0.5) * chartW / n; }
+            function yPos(v){ return padT + chartH - (v - yMin) / yRange * chartH; }
+
+            // 背景
+            ctx.fillStyle = "#0f172a";
+            ctx.fillRect(0, 0, W, H);
+
+            // 格線
+            ctx.strokeStyle = "#1e293b";
+            ctx.lineWidth = 1;
+            for(var gi=0;gi<5;gi++){
+                var gy = padT + gi * chartH / 4;
+                ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(W-padR, gy); ctx.stroke();
+                var gv = yMax - gi * yRange / 4;
+                ctx.fillStyle = "#64748b";
+                ctx.font = "10px sans-serif";
+                ctx.textAlign = "right";
+                ctx.fillText(gv.toFixed(1), padL-4, gy+4);
+            }
+
+            // K線
+            var cw = Math.max(3, chartW / n * 0.5);
+            for(var i=0;i<n;i++){
+                var o = cd.open[i], h = cd.high[i], l = cd.low[i], c = cd.close[i];
+                if(o===null||h===null||l===null||c===null) continue;
+                var x = xPos(i);
+                var isRed = c < o;
+                var color = isRed ? "#f87171" : "#4ade80";
+
+                // 上下影線
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, yPos(h));
+                ctx.lineTo(x, yPos(l));
+                ctx.stroke();
+
+                // 實體
+                var bodyTop = yPos(Math.max(o,c));
+                var bodyBot = yPos(Math.min(o,c));
+                var bodyH = Math.max(1, bodyBot - bodyTop);
+                ctx.fillStyle = color;
+                ctx.fillRect(x - cw/2, bodyTop, cw, bodyH);
+            }
+
+            // MA10
+            ctx.strokeStyle = "#fb923c";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            var started10 = false;
+            for(var i=0;i<n;i++){
+                if(cd.ma10[i]===null) continue;
+                if(!started10){ ctx.moveTo(xPos(i), yPos(cd.ma10[i])); started10=true; }
+                else { ctx.lineTo(xPos(i), yPos(cd.ma10[i])); }
+            }
+            ctx.stroke();
+
+            // MA20
+            ctx.strokeStyle = "#60a5fa";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            var started20 = false;
+            for(var i=0;i<n;i++){
+                if(cd.ma20[i]===null) continue;
+                if(!started20){ ctx.moveTo(xPos(i), yPos(cd.ma20[i])); started20=true; }
+                else { ctx.lineTo(xPos(i), yPos(cd.ma20[i])); }
+            }
+            ctx.stroke();
+
+            // X軸標籤
+            ctx.fillStyle = "#64748b";
+            ctx.font = "10px sans-serif";
+            ctx.textAlign = "center";
+            var step = Math.ceil(n / 10);
+            for(var i=0;i<n;i+=step){
+                ctx.fillText(cd.labels[i], xPos(i), H - padB + 14);
+            }
+
+            // 處置期間分隔線
+            if(cd.disposal_start_idx !== null){
+                ctx.strokeStyle = "rgba(251,146,60,0.4)";
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4,4]);
+                var dx = xPos(cd.disposal_start_idx) - cw;
+                ctx.beginPath(); ctx.moveTo(dx, padT); ctx.lineTo(dx, H-padB); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Tooltip
+            canvas.addEventListener("mousemove", function(e){
+                var rect = canvas.getBoundingClientRect();
+                var mx = e.clientX - rect.left;
+                var idx = Math.round((mx - padL) / chartW * n - 0.5);
+                if(idx < 0 || idx >= n) return;
+                ctx.clearRect(0,0,W,H);
+
+                // Redraw (simplified - just redraw all)
+                ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,W,H);
+                ctx.strokeStyle="#1e293b"; ctx.lineWidth=1;
+                for(var gi=0;gi<5;gi++){
+                    var gy=padT+gi*chartH/4;
+                    ctx.beginPath();ctx.moveTo(padL,gy);ctx.lineTo(W-padR,gy);ctx.stroke();
+                    var gv=yMax-gi*yRange/4;
+                    ctx.fillStyle="#64748b";ctx.font="10px sans-serif";ctx.textAlign="right";
+                    ctx.fillText(gv.toFixed(1),padL-4,gy+4);
                 }
+                for(var i=0;i<n;i++){
+                    var o=cd.open[i],h=cd.high[i],l=cd.low[i],c=cd.close[i];
+                    if(o===null||h===null||l===null||c===null)continue;
+                    var x=xPos(i),isRed=c<o,color=isRed?"#f87171":"#4ade80";
+                    ctx.strokeStyle=color;ctx.lineWidth=1;
+                    ctx.beginPath();ctx.moveTo(x,yPos(h));ctx.lineTo(x,yPos(l));ctx.stroke();
+                    var bt=yPos(Math.max(o,c)),bb=yPos(Math.min(o,c)),bh=Math.max(1,bb-bt);
+                    ctx.fillStyle=color;ctx.fillRect(x-cw/2,bt,cw,bh);
+                }
+                ctx.strokeStyle="#fb923c";ctx.lineWidth=1.5;ctx.beginPath();var s10=false;
+                for(var i=0;i<n;i++){if(cd.ma10[i]===null)continue;if(!s10){ctx.moveTo(xPos(i),yPos(cd.ma10[i]));s10=true;}else ctx.lineTo(xPos(i),yPos(cd.ma10[i]));}ctx.stroke();
+                ctx.strokeStyle="#60a5fa";ctx.lineWidth=1.5;ctx.beginPath();var s20=false;
+                for(var i=0;i<n;i++){if(cd.ma20[i]===null)continue;if(!s20){ctx.moveTo(xPos(i),yPos(cd.ma20[i]));s20=true;}else ctx.lineTo(xPos(i),yPos(cd.ma20[i]));}ctx.stroke();
+                ctx.fillStyle="#64748b";ctx.font="10px sans-serif";ctx.textAlign="center";
+                for(var i=0;i<n;i+=step)ctx.fillText(cd.labels[i],xPos(i),H-padB+14);
+                if(cd.disposal_start_idx!==null){
+                    ctx.strokeStyle="rgba(251,146,60,0.4)";ctx.lineWidth=1;ctx.setLineDash([4,4]);
+                    var dx=xPos(cd.disposal_start_idx)-cw;ctx.beginPath();ctx.moveTo(dx,padT);ctx.lineTo(dx,H-padB);ctx.stroke();ctx.setLineDash([]);
+                }
+
+                // Highlight bar
+                ctx.fillStyle = "rgba(255,255,255,0.05)";
+                ctx.fillRect(xPos(idx)-cw, padT, cw*2, chartH);
+
+                // Tooltip box
+                var o=cd.open[idx],h=cd.high[idx],l=cd.low[idx],c=cd.close[idx],m10=cd.ma10[idx],m20=cd.ma20[idx];
+                var lines=["日期："+cd.labels[idx],"開："+(o||"-"),"高："+(h||"-"),"低："+(l||"-"),"收："+(c||"-")];
+                if(m10)lines.push("10日："+m10+(c&&c<m10?" ⚠️":""));
+                if(m20)lines.push("月線："+m20+(c&&c<m20?" ⚠️":""));
+                var tw=120,th=lines.length*18+12;
+                var tx=xPos(idx)+10; if(tx+tw>W-padR)tx=xPos(idx)-tw-10;
+                var ty=padT+10;
+                ctx.fillStyle="#1e293b";ctx.strokeStyle="#334155";ctx.lineWidth=1;
+                ctx.beginPath();ctx.roundRect(tx,ty,tw,th,6);ctx.fill();ctx.stroke();
+                ctx.fillStyle="#e2e8f0";ctx.font="11px sans-serif";ctx.textAlign="left";
+                lines.forEach(function(line,li){ctx.fillText(line,tx+8,ty+18+li*18);});
             });
         })();
         </script>
@@ -1404,61 +1515,7 @@ def strategy13():
 
     # 為每支股票準備走勢圖資料（處置前5天 + 處置期間）
     for s in s13:
-        try:
-            stock_id = s["股票代號"]
-            if close_3m is None or stock_id not in close_3m.columns:
-                s["chart_data"] = None
-                continue
-
-            prices = close_3m[stock_id].dropna()
-
-            prices.index = pd.to_datetime(prices.index)
-
-            # 找處置開始日
-            start_dt = pd.to_datetime(s["處置開始日"]) if s["處置開始日"] else None
-            end_dt   = pd.to_datetime(s["出關日期"])
-
-            # 用完整歷史資料算MA，確保每個點都有值
-            ma10_full = prices.rolling(10).mean()
-            ma20_full = prices.rolling(20).mean()
-
-            # 找顯示範圍：處置前5天到今天
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            if start_dt is not None:
-                pre_idx = prices.index.searchsorted(start_dt)
-                pre_start_idx = max(0, pre_idx - 5)
-            else:
-                pre_start_idx = max(0, len(prices) - 40)
-
-            chart_prices = prices.iloc[pre_start_idx:]
-            chart_prices = chart_prices[chart_prices.index <= today_str]
-            chart_ma10   = ma10_full.iloc[pre_start_idx:][ma10_full.iloc[pre_start_idx:].index <= today_str]
-            chart_ma20   = ma20_full.iloc[pre_start_idx:][ma20_full.iloc[pre_start_idx:].index <= today_str]
-
-            if len(chart_prices) < 2:
-                s["chart_data"] = None
-                continue
-
-            disposal_start_idx = None
-            if start_dt is not None:
-                for i, d in enumerate(chart_prices.index):
-                    if d >= start_dt:
-                        disposal_start_idx = i
-                        break
-
-            def to_list(series):
-                return [round(v, 2) if not pd.isna(v) else None for v in series]
-
-            s["chart_data"] = {
-                "labels": [d.strftime("%m/%d") for d in chart_prices.index],
-                "close":  to_list(chart_prices),
-                "ma10":   to_list(chart_ma10),
-                "ma20":   to_list(chart_ma20),
-                "disposal_start_idx": disposal_start_idx,
-            }
-        except Exception as e:
-            s["chart_data"] = None
-
+        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m)
     return render_template_string(STRATEGY13_TEMPLATE, stocks=s13, update_time=update_time)
 
 STRATEGY14_TEMPLATE = """
@@ -1526,79 +1583,171 @@ STRATEGY14_TEMPLATE = """
         <script>
         (function(){
             var cd = {{ s.chart_data | tojson }};
-            var ctx = document.getElementById("chart_{{ loop.index }}").getContext("2d");
+            var canvas = document.getElementById("chart_{{ loop.index }}");
+            var ctx = canvas.getContext("2d");
+            var W = canvas.offsetWidth || canvas.parentElement.offsetWidth || 900;
+            var H = 260;
+            canvas.width = W;
+            canvas.height = H;
 
-            // 每個點的顏色：低於10日線或月線 → 紅點，否則白點
-            var pointColors = cd.close.map(function(c, i) {
-                if (c === null) return "#e2e8f0";
-                var below10 = cd.ma10[i] !== null && c < cd.ma10[i];
-                var below20 = cd.ma20[i] !== null && c < cd.ma20[i];
-                if (below10 || below20) return "#f87171";  // 紅
-                return "#e2e8f0";  // 白
-            });
+            var n = cd.labels.length;
+            var padL = 55, padR = 10, padT = 15, padB = 40;
+            var chartW = W - padL - padR;
+            var chartH = H - padT - padB;
 
-            var pointRadii = cd.close.map(function(c, i) {
-                if (c === null) return 3;
-                var below10 = cd.ma10[i] !== null && c < cd.ma10[i];
-                var below20 = cd.ma20[i] !== null && c < cd.ma20[i];
-                return (below10 || below20) ? 6 : 3;  // 紅點大一點
-            });
+            // 計算Y軸範圍
+            var vals = [];
+            cd.close.forEach(function(v){if(v)vals.push(v);});
+            cd.high.forEach(function(v){if(v)vals.push(v);});
+            cd.low.forEach(function(v){if(v)vals.push(v);});
+            cd.ma10.forEach(function(v){if(v)vals.push(v);});
+            cd.ma20.forEach(function(v){if(v)vals.push(v);});
+            var yMin = Math.min.apply(null, vals) * 0.995;
+            var yMax = Math.max.apply(null, vals) * 1.005;
+            var yRange = yMax - yMin;
 
-            new Chart(ctx, {
-                type: "line",
-                data: {
-                    labels: cd.labels,
-                    datasets: [
-                        {
-                            label: "收盤價",
-                            data: cd.close,
-                            borderColor: "#e2e8f0",
-                            borderWidth: 2,
-                            pointRadius: pointRadii,
-                            pointBackgroundColor: pointColors,
-                            pointBorderColor: pointColors,
-                            pointHoverRadius: 7,
-                            tension: 0.2,
-                            fill: false
-                        },
-                        { label: "10日線", data: cd.ma10, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false },
-                        { label: "月線MA20", data: cd.ma20, borderColor: "rgba(0,0,0,0)", pointRadius: 0, pointHoverRadius: 0, fill: false }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    animation: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                title: function(items) { return items[0].label; },
-                                label: function(item) { return null; },
-                                afterBody: function(items) {
-                                    var idx = items[0].dataIndex;
-                                    var c = cd.close[idx];
-                                    var m10 = cd.ma10[idx];
-                                    var m20 = cd.ma20[idx];
-                                    var lines = [];
-                                    lines.push("收盤價：" + (c !== null ? c : "-"));
-                                    lines.push("10日線：" + (m10 !== null ? m10 : "-") + (m10 !== null && c !== null && c < m10 ? " ⚠️" : ""));
-                                    lines.push("月線MA20：" + (m20 !== null ? m20 : "-") + (m20 !== null && c !== null && c < m20 ? " ⚠️" : ""));
-                                    return lines;
-                                }
-                            },
-                            backgroundColor: "#1e293b",
-                            titleColor: "#94a3b8",
-                            bodyColor: "#e2e8f0",
-                            borderColor: "#334155",
-                            borderWidth: 1,
-                            padding: 10
-                        }
-                    },
-                    scales: {
-                        x: { ticks: { color: "#64748b", font: { size: 10 }, maxRotation: 45 }, grid: { color: "#1e293b" } },
-                        y: { ticks: { color: "#64748b", font: { size: 10 } }, grid: { color: "#334155" } }
-                    }
+            function xPos(i){ return padL + (i + 0.5) * chartW / n; }
+            function yPos(v){ return padT + chartH - (v - yMin) / yRange * chartH; }
+
+            // 背景
+            ctx.fillStyle = "#0f172a";
+            ctx.fillRect(0, 0, W, H);
+
+            // 格線
+            ctx.strokeStyle = "#1e293b";
+            ctx.lineWidth = 1;
+            for(var gi=0;gi<5;gi++){
+                var gy = padT + gi * chartH / 4;
+                ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(W-padR, gy); ctx.stroke();
+                var gv = yMax - gi * yRange / 4;
+                ctx.fillStyle = "#64748b";
+                ctx.font = "10px sans-serif";
+                ctx.textAlign = "right";
+                ctx.fillText(gv.toFixed(1), padL-4, gy+4);
+            }
+
+            // K線
+            var cw = Math.max(3, chartW / n * 0.5);
+            for(var i=0;i<n;i++){
+                var o = cd.open[i], h = cd.high[i], l = cd.low[i], c = cd.close[i];
+                if(o===null||h===null||l===null||c===null) continue;
+                var x = xPos(i);
+                var isRed = c < o;
+                var color = isRed ? "#f87171" : "#4ade80";
+
+                // 上下影線
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, yPos(h));
+                ctx.lineTo(x, yPos(l));
+                ctx.stroke();
+
+                // 實體
+                var bodyTop = yPos(Math.max(o,c));
+                var bodyBot = yPos(Math.min(o,c));
+                var bodyH = Math.max(1, bodyBot - bodyTop);
+                ctx.fillStyle = color;
+                ctx.fillRect(x - cw/2, bodyTop, cw, bodyH);
+            }
+
+            // MA10
+            ctx.strokeStyle = "#fb923c";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            var started10 = false;
+            for(var i=0;i<n;i++){
+                if(cd.ma10[i]===null) continue;
+                if(!started10){ ctx.moveTo(xPos(i), yPos(cd.ma10[i])); started10=true; }
+                else { ctx.lineTo(xPos(i), yPos(cd.ma10[i])); }
+            }
+            ctx.stroke();
+
+            // MA20
+            ctx.strokeStyle = "#60a5fa";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            var started20 = false;
+            for(var i=0;i<n;i++){
+                if(cd.ma20[i]===null) continue;
+                if(!started20){ ctx.moveTo(xPos(i), yPos(cd.ma20[i])); started20=true; }
+                else { ctx.lineTo(xPos(i), yPos(cd.ma20[i])); }
+            }
+            ctx.stroke();
+
+            // X軸標籤
+            ctx.fillStyle = "#64748b";
+            ctx.font = "10px sans-serif";
+            ctx.textAlign = "center";
+            var step = Math.ceil(n / 10);
+            for(var i=0;i<n;i+=step){
+                ctx.fillText(cd.labels[i], xPos(i), H - padB + 14);
+            }
+
+            // 處置期間分隔線
+            if(cd.disposal_start_idx !== null){
+                ctx.strokeStyle = "rgba(251,146,60,0.4)";
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4,4]);
+                var dx = xPos(cd.disposal_start_idx) - cw;
+                ctx.beginPath(); ctx.moveTo(dx, padT); ctx.lineTo(dx, H-padB); ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Tooltip
+            canvas.addEventListener("mousemove", function(e){
+                var rect = canvas.getBoundingClientRect();
+                var mx = e.clientX - rect.left;
+                var idx = Math.round((mx - padL) / chartW * n - 0.5);
+                if(idx < 0 || idx >= n) return;
+                ctx.clearRect(0,0,W,H);
+
+                // Redraw (simplified - just redraw all)
+                ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,W,H);
+                ctx.strokeStyle="#1e293b"; ctx.lineWidth=1;
+                for(var gi=0;gi<5;gi++){
+                    var gy=padT+gi*chartH/4;
+                    ctx.beginPath();ctx.moveTo(padL,gy);ctx.lineTo(W-padR,gy);ctx.stroke();
+                    var gv=yMax-gi*yRange/4;
+                    ctx.fillStyle="#64748b";ctx.font="10px sans-serif";ctx.textAlign="right";
+                    ctx.fillText(gv.toFixed(1),padL-4,gy+4);
                 }
+                for(var i=0;i<n;i++){
+                    var o=cd.open[i],h=cd.high[i],l=cd.low[i],c=cd.close[i];
+                    if(o===null||h===null||l===null||c===null)continue;
+                    var x=xPos(i),isRed=c<o,color=isRed?"#f87171":"#4ade80";
+                    ctx.strokeStyle=color;ctx.lineWidth=1;
+                    ctx.beginPath();ctx.moveTo(x,yPos(h));ctx.lineTo(x,yPos(l));ctx.stroke();
+                    var bt=yPos(Math.max(o,c)),bb=yPos(Math.min(o,c)),bh=Math.max(1,bb-bt);
+                    ctx.fillStyle=color;ctx.fillRect(x-cw/2,bt,cw,bh);
+                }
+                ctx.strokeStyle="#fb923c";ctx.lineWidth=1.5;ctx.beginPath();var s10=false;
+                for(var i=0;i<n;i++){if(cd.ma10[i]===null)continue;if(!s10){ctx.moveTo(xPos(i),yPos(cd.ma10[i]));s10=true;}else ctx.lineTo(xPos(i),yPos(cd.ma10[i]));}ctx.stroke();
+                ctx.strokeStyle="#60a5fa";ctx.lineWidth=1.5;ctx.beginPath();var s20=false;
+                for(var i=0;i<n;i++){if(cd.ma20[i]===null)continue;if(!s20){ctx.moveTo(xPos(i),yPos(cd.ma20[i]));s20=true;}else ctx.lineTo(xPos(i),yPos(cd.ma20[i]));}ctx.stroke();
+                ctx.fillStyle="#64748b";ctx.font="10px sans-serif";ctx.textAlign="center";
+                for(var i=0;i<n;i+=step)ctx.fillText(cd.labels[i],xPos(i),H-padB+14);
+                if(cd.disposal_start_idx!==null){
+                    ctx.strokeStyle="rgba(251,146,60,0.4)";ctx.lineWidth=1;ctx.setLineDash([4,4]);
+                    var dx=xPos(cd.disposal_start_idx)-cw;ctx.beginPath();ctx.moveTo(dx,padT);ctx.lineTo(dx,H-padB);ctx.stroke();ctx.setLineDash([]);
+                }
+
+                // Highlight bar
+                ctx.fillStyle = "rgba(255,255,255,0.05)";
+                ctx.fillRect(xPos(idx)-cw, padT, cw*2, chartH);
+
+                // Tooltip box
+                var o=cd.open[idx],h=cd.high[idx],l=cd.low[idx],c=cd.close[idx],m10=cd.ma10[idx],m20=cd.ma20[idx];
+                var lines=["日期："+cd.labels[idx],"開："+(o||"-"),"高："+(h||"-"),"低："+(l||"-"),"收："+(c||"-")];
+                if(m10)lines.push("10日："+m10+(c&&c<m10?" ⚠️":""));
+                if(m20)lines.push("月線："+m20+(c&&c<m20?" ⚠️":""));
+                var tw=120,th=lines.length*18+12;
+                var tx=xPos(idx)+10; if(tx+tw>W-padR)tx=xPos(idx)-tw-10;
+                var ty=padT+10;
+                ctx.fillStyle="#1e293b";ctx.strokeStyle="#334155";ctx.lineWidth=1;
+                ctx.beginPath();ctx.roundRect(tx,ty,tw,th,6);ctx.fill();ctx.stroke();
+                ctx.fillStyle="#e2e8f0";ctx.font="11px sans-serif";ctx.textAlign="left";
+                lines.forEach(function(line,li){ctx.fillText(line,tx+8,ty+18+li*18);});
             });
         })();
         </script>
@@ -1619,58 +1768,12 @@ def strategy14():
     s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     close_3m = _global_close_3m
+    open_3m  = _global_open_3m
+    high_3m  = _global_high_3m
+    low_3m   = _global_low_3m
 
     for s in s14:
-        try:
-            stock_id = s["股票代號"]
-            if close_3m is None or stock_id not in close_3m.columns:
-                s["chart_data"] = None
-                continue
-
-            prices = close_3m[stock_id].dropna()
-            prices.index = pd.to_datetime(prices.index)
-
-            start_dt = pd.to_datetime(s["處置開始日"]) if s["處置開始日"] else None
-            end_dt   = pd.to_datetime(s["出關日期"])
-
-            ma10_full = prices.rolling(10).mean()
-            ma20_full = prices.rolling(20).mean()
-
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            if start_dt is not None:
-                pre_idx = prices.index.searchsorted(start_dt)
-                pre_start_idx = max(0, pre_idx - 5)
-            else:
-                pre_start_idx = max(0, len(prices) - 40)
-
-            chart_prices = prices.iloc[pre_start_idx:]
-            chart_prices = chart_prices[chart_prices.index <= today_str]
-            chart_ma10   = ma10_full.iloc[pre_start_idx:][ma10_full.iloc[pre_start_idx:].index <= today_str]
-            chart_ma20   = ma20_full.iloc[pre_start_idx:][ma20_full.iloc[pre_start_idx:].index <= today_str]
-
-            if len(chart_prices) < 2:
-                s["chart_data"] = None
-                continue
-
-            disposal_start_idx = None
-            if start_dt is not None:
-                for i, d in enumerate(chart_prices.index):
-                    if d >= start_dt:
-                        disposal_start_idx = i
-                        break
-
-            def to_list(series):
-                return [round(v, 2) if not pd.isna(v) else None for v in series]
-
-            s["chart_data"] = {
-                "labels": [d.strftime("%m/%d") for d in chart_prices.index],
-                "close":  to_list(chart_prices),
-                "ma10":   to_list(chart_ma10),
-                "ma20":   to_list(chart_ma20),
-                "disposal_start_idx": disposal_start_idx,
-            }
-        except:
-            s["chart_data"] = None
+        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m)
 
     return render_template_string(STRATEGY14_TEMPLATE, stocks=s14, update_time=update_time)
 
