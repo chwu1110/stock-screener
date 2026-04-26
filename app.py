@@ -1129,6 +1129,65 @@ _global_close_3m = None
 _global_open_3m = None
 _global_high_3m = None
 _global_low_3m = None
+
+def build_chart_data(s, close_3m, open_3m, high_3m, low_3m):
+    try:
+        stock_id = s["股票代號"]
+        if close_3m is None or stock_id not in close_3m.columns:
+            return None
+
+        prices = close_3m[stock_id].dropna()
+        prices.index = pd.to_datetime(prices.index)
+
+        start_dt = pd.to_datetime(s["處置開始日"]) if s["處置開始日"] else None
+
+        ma10_full = prices.rolling(10).mean()
+        ma20_full = prices.rolling(20).mean()
+
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        if start_dt is not None:
+            pre_idx = prices.index.searchsorted(start_dt)
+            pre_start_idx = max(0, pre_idx - 5)
+        else:
+            pre_start_idx = max(0, len(prices) - 40)
+
+        chart_prices = prices.iloc[pre_start_idx:]
+        chart_prices = chart_prices[chart_prices.index <= today_str]
+        chart_ma10   = ma10_full.iloc[pre_start_idx:][ma10_full.iloc[pre_start_idx:].index <= today_str]
+        chart_ma20   = ma20_full.iloc[pre_start_idx:][ma20_full.iloc[pre_start_idx:].index <= today_str]
+
+        if len(chart_prices) < 2:
+            return None
+
+        disposal_start_idx = None
+        if start_dt is not None:
+            for i, d in enumerate(chart_prices.index):
+                if d >= start_dt:
+                    disposal_start_idx = i
+                    break
+
+        def to_list(series):
+            return [round(v, 2) if not pd.isna(v) else None for v in series]
+
+        def get_ohlc(df, idx_list):
+            if df is None or stock_id not in df.columns:
+                return [None] * len(idx_list)
+            return [round(float(df[stock_id].loc[d]), 2) if d in df.index and not pd.isna(df[stock_id].loc[d]) else None for d in idx_list]
+
+        idx_list = chart_prices.index
+        return {
+            "labels": [d.strftime("%m/%d") for d in idx_list],
+            "close":  to_list(chart_prices),
+            "open":   get_ohlc(open_3m, idx_list),
+            "high":   get_ohlc(high_3m, idx_list),
+            "low":    get_ohlc(low_3m, idx_list),
+            "ma10":   to_list(chart_ma10),
+            "ma20":   to_list(chart_ma20),
+            "disposal_start_idx": disposal_start_idx,
+        }
+    except:
+        return None
+
 _cache_lock = __import__("threading").Lock()
 _cache_loading = False
 
