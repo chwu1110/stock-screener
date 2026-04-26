@@ -117,6 +117,13 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[12] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
+        <a href="/strategy/14" class="card">
+            <div class="card-icon">⏱️</div>
+            <div class="card-title">5分處置股</div>
+            <div class="card-desc">目前正在被處置的股票（5分鐘搓合），依出關日由近到遠排列，含走勢圖</div>
+            <div class="card-count">{{ counts[13] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
     </div>
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
 </body>
