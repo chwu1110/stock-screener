@@ -1051,9 +1051,11 @@ def get_all_data():
             if stock_id in s13_seen:
                 continue
             if stock_id not in close_3m.columns:
+                print(f"策略13 {stock_id} 不在close_3m")
                 continue
             prices = close_3m[stock_id].dropna()
             if len(prices) < 10:
+                print(f"策略13 {stock_id} 價格資料不足 {len(prices)}筆")
                 continue
 
             ma10 = prices.rolling(10).mean()
@@ -1082,7 +1084,7 @@ def get_all_data():
 
     # 策略十四：5分處置股 - 跟策略13相同邏輯，但篩選5分鐘搓合
     s14 = []
-    s14_seen = set()
+    s14_seen = set(s13_seen)  # 排除已在20分盤的股票
 
     def process_disposal_rows_14(rows):
         today14 = datetime.now().date()
