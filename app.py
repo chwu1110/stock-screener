@@ -957,58 +957,6 @@ def get_all_data():
         except:
             return None
 
-    def process_disposal_rows_13(rows):
-        today13 = datetime.now().date()
-        for row in rows:
-            try:
-                stock_id   = str(row[2]).strip()
-                stock_name = str(row[3]).strip()
-                period     = str(row[6]).strip() if len(row) > 6 else ""
-                content    = str(row[8]).strip() if len(row) > 8 else ""
-
-                if "二十分鐘" not in content:
-                    continue
-                if stock_id in s13_seen:
-                    continue
-
-                sep = "～" if "～" in period else ("~" if "~" in period else "")
-                end_str   = period.split(sep)[-1].strip() if sep else ""
-                start_str = period.split(sep)[0].strip() if sep else ""
-                end_date   = parse_roc_date_13(end_str)
-                start_date = parse_roc_date_13(start_str)
-                if end_date is None:
-                    continue
-
-                days_left = (end_date.date() - today13).days
-
-                if stock_id not in close_3m.columns:
-                    continue
-                prices = close_3m[stock_id].dropna()
-                if len(prices) < 10:
-                    continue
-
-                ma10 = prices.rolling(10).mean()
-                ma20 = prices.rolling(20).mean()
-                current_price = round(float(prices.iloc[-1]), 2)
-                current_ma10  = round(float(ma10.iloc[-1]), 2) if not pd.isna(ma10.iloc[-1]) else None
-                current_ma20  = round(float(ma20.iloc[-1]), 2) if not pd.isna(ma20.iloc[-1]) else None
-
-                s13.append({
-                    "股票代號": stock_id,
-                    "股票名稱": stock_name,
-                    "處置期間": period,
-                    "出關日期": end_date.strftime("%Y-%m-%d"),
-                    "剩餘天數": days_left,
-                    "目前股價": current_price,
-                    "10日均線": current_ma10,
-                    "月線(MA20)": current_ma20,
-                    "處置開始日": start_date.strftime("%Y-%m-%d") if start_date else "",
-                })
-                s13_seen.add(stock_id)
-            except Exception as ex:
-                print(f"策略13 row 解析失敗: {ex}")
-                continue
-
     # 來源：stockwarden 公開 JSON（上市＋上櫃完整20分鐘資料）
     # 格式: data[股票代號][公告日] = {b:代號, h:名稱, k:開始日(民國), f:結束日(民國), g:分鐘數}
     try:
@@ -1051,11 +999,9 @@ def get_all_data():
             if stock_id in s13_seen:
                 continue
             if stock_id not in close_3m.columns:
-                print(f"策略13 {stock_id} 不在close_3m")
                 continue
             prices = close_3m[stock_id].dropna()
             if len(prices) < 10:
-                print(f"策略13 {stock_id} 價格資料不足 {len(prices)}筆")
                 continue
 
             ma10 = prices.rolling(10).mean()
@@ -1085,57 +1031,6 @@ def get_all_data():
     # 策略十四：5分處置股 - 跟策略13相同邏輯，但篩選5分鐘搓合
     s14 = []
     s14_seen = set(s13_seen)  # 排除已在20分盤的股票
-
-    def process_disposal_rows_14(rows):
-        today14 = datetime.now().date()
-        for row in rows:
-            try:
-                stock_id   = str(row[2]).strip()
-                stock_name = str(row[3]).strip()
-                period     = str(row[6]).strip() if len(row) > 6 else ""
-                content    = str(row[8]).strip() if len(row) > 8 else ""
-
-                if "五分鐘" not in content:
-                    continue
-                if stock_id in s14_seen:
-                    continue
-
-                sep = "～" if "～" in period else ("~" if "~" in period else "")
-                end_str   = period.split(sep)[-1].strip() if sep else ""
-                start_str = period.split(sep)[0].strip() if sep else ""
-                end_date   = parse_roc_date_13(end_str)
-                start_date = parse_roc_date_13(start_str)
-                if end_date is None:
-                    continue
-
-                days_left = (end_date.date() - today14).days
-
-                if stock_id not in close_3m.columns:
-                    continue
-                prices = close_3m[stock_id].dropna()
-                if len(prices) < 10:
-                    continue
-
-                ma10 = prices.rolling(10).mean()
-                ma20 = prices.rolling(20).mean()
-                current_price = round(float(prices.iloc[-1]), 2)
-                current_ma10  = round(float(ma10.iloc[-1]), 2) if not pd.isna(ma10.iloc[-1]) else None
-                current_ma20  = round(float(ma20.iloc[-1]), 2) if not pd.isna(ma20.iloc[-1]) else None
-
-                s14.append({
-                    "股票代號": stock_id,
-                    "股票名稱": stock_name,
-                    "處置期間": period,
-                    "出關日期": end_date.strftime("%Y-%m-%d"),
-                    "剩餘天數": days_left,
-                    "目前股價": current_price,
-                    "10日均線": current_ma10,
-                    "月線(MA20)": current_ma20,
-                    "處置開始日": start_date.strftime("%Y-%m-%d") if start_date else "",
-                })
-                s14_seen.add(stock_id)
-            except:
-                continue
 
     try:
         sw_res14 = requests.get(
