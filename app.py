@@ -1571,6 +1571,9 @@ def strategy13():
     s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     close_3m = _global_close_3m
+    open_3m  = _global_open_3m
+    high_3m  = _global_high_3m
+    low_3m   = _global_low_3m
 
     # 為每支股票準備走勢圖資料（處置前5天 + 處置期間）
     for s in s13:
