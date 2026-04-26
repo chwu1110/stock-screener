@@ -595,10 +595,20 @@ def get_all_data():
         print(f"price:最高價 載入失敗: {e}")
         high_3m = None
 
-    global _global_open_3m, _global_high_3m, _global_low_3m
+    try:
+        vol_ = data.get("price:成交量")
+        vol_df = pd.DataFrame(vol_.values, index=pd.to_datetime(vol_.index.astype(str)), columns=vol_.columns)
+        vol_3m = vol_df[vol_df.index >= pd.to_datetime(start_3m)]
+        print("Daily usage: -- price:成交量 載入完成")
+    except Exception as e:
+        print(f"price:成交量 載入失敗: {e}")
+        vol_3m = None
+
+    global _global_open_3m, _global_high_3m, _global_low_3m, _global_vol_3m
     _global_open_3m = open_df[open_df.index >= pd.to_datetime(start_3m)]
     _global_high_3m = high_3m
     _global_low_3m  = low_3m
+    _global_vol_3m  = vol_3m
 
     def gap_stars(stock, dates):
         """判斷是否為跳空漲停（一價到底）：開盤＝漲停價 且 最低＝漲停價"""
@@ -1129,8 +1139,9 @@ _global_close_3m = None
 _global_open_3m = None
 _global_high_3m = None
 _global_low_3m = None
+_global_vol_3m = None
 
-def build_chart_data(s, close_3m, open_3m, high_3m, low_3m):
+def build_chart_data(s, close_3m, open_3m, high_3m, low_3m, vol_3m=None):
     try:
         stock_id = s["股票代號"]
         if close_3m is None or stock_id not in close_3m.columns:
@@ -1170,9 +1181,12 @@ def build_chart_data(s, close_3m, open_3m, high_3m, low_3m):
             return [round(v, 2) if not pd.isna(v) else None for v in series]
 
         def get_ohlc(df, idx_list):
-            if df is None or stock_id not in df.columns:
+            try:
+                if df is None or stock_id not in df.columns:
+                    return [None] * len(idx_list)
+                return [round(float(df[stock_id].loc[d]), 2) if d in df.index and not pd.isna(df[stock_id].loc[d]) else None for d in idx_list]
+            except:
                 return [None] * len(idx_list)
-            return [round(float(df[stock_id].loc[d]), 2) if d in df.index and not pd.isna(df[stock_id].loc[d]) else None for d in idx_list]
 
         idx_list = chart_prices.index
         return {
@@ -1181,6 +1195,7 @@ def build_chart_data(s, close_3m, open_3m, high_3m, low_3m):
             "open":   get_ohlc(open_3m, idx_list),
             "high":   get_ohlc(high_3m, idx_list),
             "low":    get_ohlc(low_3m, idx_list),
+            "vol":    get_ohlc(vol_3m, idx_list),
             "ma10":   to_list(chart_ma10),
             "ma20":   to_list(chart_ma20),
             "disposal_start_idx": disposal_start_idx,
@@ -1388,14 +1403,16 @@ STRATEGY13_TEMPLATE = """
             var canvas = document.getElementById("chart_{{ loop.index }}");
             var ctx = canvas.getContext("2d");
             var W = canvas.offsetWidth || canvas.parentElement.offsetWidth || 900;
-            var H = 260;
+            var H = 320;
             canvas.width = W;
             canvas.height = H;
 
             var n = cd.labels.length;
             var padL = 55, padR = 10, padT = 15, padB = 40;
-            var chartW = W - padL - padR;
-            var chartH = H - padT - padB;
+            var volH = 60;  // 量的高度
+            var volGap = 8; // K線和量之間的間距
+            var chartH = H - padT - padB - volH - volGap;
+            var volTop = padT + chartH + volGap;
 
             // 計算Y軸範圍
             var vals = [];
@@ -1435,7 +1452,7 @@ STRATEGY13_TEMPLATE = """
                 if(o===null||h===null||l===null||c===null) continue;
                 var x = xPos(i);
                 var isRed = c < o;
-                var color = isRed ? "#f87171" : "#4ade80";
+                var color = isRed ? "#4ade80" : "#f87171";
 
                 // 上下影線
                 ctx.strokeStyle = color;
@@ -1476,6 +1493,27 @@ STRATEGY13_TEMPLATE = """
                 else { ctx.lineTo(xPos(i), yPos(cd.ma20[i])); }
             }
             ctx.stroke();
+
+            // 成交量柱
+            var vols = cd.vol || [];
+            var maxVol = 0;
+            vols.forEach(function(v){ if(v && v > maxVol) maxVol = v; });
+            if(maxVol > 0){
+                for(var i=0;i<n;i++){
+                    var v = vols[i];
+                    if(!v) continue;
+                    var o=cd.open[i], c=cd.close[i];
+                    var isRed = c !== null && o !== null && c < o;
+                    ctx.fillStyle = isRed ? "rgba(74,222,128,0.6)" : "rgba(248,113,113,0.6)";
+                    var barH = (v / maxVol) * volH;
+                    ctx.fillRect(xPos(i) - cw/2, volTop + volH - barH, cw, barH);
+                }
+                // 量的Y軸標籤
+                ctx.fillStyle = "#64748b";
+                ctx.font = "9px sans-serif";
+                ctx.textAlign = "right";
+                ctx.fillText((maxVol/1000).toFixed(0)+"K", padL-4, volTop+10);
+            }
 
             // X軸標籤
             ctx.fillStyle = "#64748b";
@@ -1527,6 +1565,9 @@ STRATEGY13_TEMPLATE = """
                 for(var i=0;i<n;i++){if(cd.ma10[i]===null)continue;if(!s10){ctx.moveTo(xPos(i),yPos(cd.ma10[i]));s10=true;}else ctx.lineTo(xPos(i),yPos(cd.ma10[i]));}ctx.stroke();
                 ctx.strokeStyle="#60a5fa";ctx.lineWidth=1.5;ctx.beginPath();var s20=false;
                 for(var i=0;i<n;i++){if(cd.ma20[i]===null)continue;if(!s20){ctx.moveTo(xPos(i),yPos(cd.ma20[i]));s20=true;}else ctx.lineTo(xPos(i),yPos(cd.ma20[i]));}ctx.stroke();
+                var vols=cd.vol||[],maxVol=0;
+                vols.forEach(function(v){if(v&&v>maxVol)maxVol=v;});
+                if(maxVol>0){for(var i=0;i<n;i++){var v=vols[i];if(!v)continue;var o=cd.open[i],c=cd.close[i],isRed=c!==null&&o!==null&&c<o;ctx.fillStyle=isRed?"rgba(74,222,128,0.6)":"rgba(248,113,113,0.6)";var bh=(v/maxVol)*volH;ctx.fillRect(xPos(i)-cw/2,volTop+volH-bh,cw,bh);}ctx.fillStyle="#64748b";ctx.font="9px sans-serif";ctx.textAlign="right";ctx.fillText((maxVol/1000).toFixed(0)+"K",padL-4,volTop+10);}
                 ctx.fillStyle="#64748b";ctx.font="10px sans-serif";ctx.textAlign="center";
                 for(var i=0;i<n;i+=step)ctx.fillText(cd.labels[i],xPos(i),H-padB+14);
                 if(cd.disposal_start_idx!==null){
@@ -1539,8 +1580,9 @@ STRATEGY13_TEMPLATE = """
                 ctx.fillRect(xPos(idx)-cw, padT, cw*2, chartH);
 
                 // Tooltip box
-                var o=cd.open[idx],h=cd.high[idx],l=cd.low[idx],c=cd.close[idx],m10=cd.ma10[idx],m20=cd.ma20[idx];
+                var o=cd.open[idx],h=cd.high[idx],l=cd.low[idx],c=cd.close[idx],m10=cd.ma10[idx],m20=cd.ma20[idx],vol=(cd.vol||[])[idx];
                 var lines=["日期："+cd.labels[idx],"開："+(o||"-"),"高："+(h||"-"),"低："+(l||"-"),"收："+(c||"-")];
+                if(vol)lines.push("量："+(vol>=1000?(vol/1000).toFixed(1)+"K":vol));
                 if(m10)lines.push("10日："+m10+(c&&c<m10?" ⚠️":""));
                 if(m20)lines.push("月線："+m20+(c&&c<m20?" ⚠️":""));
                 var tw=120,th=lines.length*18+12;
@@ -1574,10 +1616,11 @@ def strategy13():
     open_3m  = _global_open_3m
     high_3m  = _global_high_3m
     low_3m   = _global_low_3m
+    vol_3m   = _global_vol_3m
 
     # 為每支股票準備走勢圖資料（處置前5天 + 處置期間）
     for s in s13:
-        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m)
+        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m, vol_3m)
     return render_template_string(STRATEGY13_TEMPLATE, stocks=s13, update_time=update_time)
 
 STRATEGY14_TEMPLATE = """
@@ -1695,7 +1738,7 @@ STRATEGY14_TEMPLATE = """
                 if(o===null||h===null||l===null||c===null) continue;
                 var x = xPos(i);
                 var isRed = c < o;
-                var color = isRed ? "#f87171" : "#4ade80";
+                var color = isRed ? "#4ade80" : "#f87171";
 
                 // 上下影線
                 ctx.strokeStyle = color;
@@ -1833,9 +1876,10 @@ def strategy14():
     open_3m  = _global_open_3m
     high_3m  = _global_high_3m
     low_3m   = _global_low_3m
+    vol_3m   = _global_vol_3m
 
     for s in s14:
-        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m)
+        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m, vol_3m)
 
     return render_template_string(STRATEGY14_TEMPLATE, stocks=s14, update_time=update_time)
 
