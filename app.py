@@ -1026,7 +1026,7 @@ def get_all_data():
             # 找該股票最新一筆且 g==20 且還在處置期間的記錄
             best = None
             for ann_date, item in date_dict.items():
-                if item.get("g") != 20:
+                if str(item.get("g", "")) != "20":
                     continue
                 end_date = parse_roc_date_13(str(item.get("f", "")))
                 if end_date is None:
@@ -1149,7 +1149,7 @@ def get_all_data():
                 continue
             best = None
             for ann_date, item in date_dict.items():
-                if item.get("g") != 5:
+                if str(item.get("g", "")) != "5":
                     continue
                 end_date = parse_roc_date_13(str(item.get("f", "")))
                 if end_date is None:
