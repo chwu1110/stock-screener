@@ -1451,8 +1451,8 @@ STRATEGY13_TEMPLATE = """
                 var o = cd.open[i], h = cd.high[i], l = cd.low[i], c = cd.close[i];
                 if(o===null||h===null||l===null||c===null) continue;
                 var x = xPos(i);
-                var isRed = c < o;
-                var color = isRed ? "#4ade80" : "#f87171";
+                var isUp = c >= o;
+                var color = isUp ? "#f87171" : "#4ade80";
 
                 // 上下影線
                 ctx.strokeStyle = color;
@@ -1503,8 +1503,8 @@ STRATEGY13_TEMPLATE = """
                     var v = vols[i];
                     if(!v) continue;
                     var o=cd.open[i], c=cd.close[i];
-                    var isRed = c !== null && o !== null && c < o;
-                    ctx.fillStyle = isRed ? "rgba(74,222,128,0.6)" : "rgba(248,113,113,0.6)";
+                    var isUp2 = c !== null && o !== null && c >= o;
+                    ctx.fillStyle = isUp2 ? "rgba(248,113,113,0.6)" : "rgba(74,222,128,0.6)";
                     var barH = (v / maxVol) * volH;
                     ctx.fillRect(xPos(i) - cw/2, volTop + volH - barH, cw, barH);
                 }
@@ -1567,7 +1567,7 @@ STRATEGY13_TEMPLATE = """
                 for(var i=0;i<n;i++){if(cd.ma20[i]===null)continue;if(!s20){ctx.moveTo(xPos(i),yPos(cd.ma20[i]));s20=true;}else ctx.lineTo(xPos(i),yPos(cd.ma20[i]));}ctx.stroke();
                 var vols=cd.vol||[],maxVol=0;
                 vols.forEach(function(v){if(v&&v>maxVol)maxVol=v;});
-                if(maxVol>0){for(var i=0;i<n;i++){var v=vols[i];if(!v)continue;var o=cd.open[i],c=cd.close[i],isRed=c!==null&&o!==null&&c<o;ctx.fillStyle=isRed?"rgba(74,222,128,0.6)":"rgba(248,113,113,0.6)";var bh=(v/maxVol)*volH;ctx.fillRect(xPos(i)-cw/2,volTop+volH-bh,cw,bh);}ctx.fillStyle="#64748b";ctx.font="9px sans-serif";ctx.textAlign="right";ctx.fillText((maxVol/1000).toFixed(0)+"K",padL-4,volTop+10);}
+                if(maxVol>0){for(var i=0;i<n;i++){var v=vols[i];if(!v)continue;var o=cd.open[i],c=cd.close[i],isUp3=c!==null&&o!==null&&c>=o;ctx.fillStyle=isUp3?"rgba(248,113,113,0.6)":"rgba(74,222,128,0.6)";var bh=(v/maxVol)*volH;ctx.fillRect(xPos(i)-cw/2,volTop+volH-bh,cw,bh);}ctx.fillStyle="#64748b";ctx.font="9px sans-serif";ctx.textAlign="right";ctx.fillText((maxVol/1000).toFixed(0)+"K",padL-4,volTop+10);}
                 ctx.fillStyle="#64748b";ctx.font="10px sans-serif";ctx.textAlign="center";
                 for(var i=0;i<n;i+=step)ctx.fillText(cd.labels[i],xPos(i),H-padB+14);
                 if(cd.disposal_start_idx!==null){
@@ -1737,8 +1737,8 @@ STRATEGY14_TEMPLATE = """
                 var o = cd.open[i], h = cd.high[i], l = cd.low[i], c = cd.close[i];
                 if(o===null||h===null||l===null||c===null) continue;
                 var x = xPos(i);
-                var isRed = c < o;
-                var color = isRed ? "#4ade80" : "#f87171";
+                var isUp = c >= o;
+                var color = isUp ? "#f87171" : "#4ade80";
 
                 // 上下影線
                 ctx.strokeStyle = color;
