@@ -1009,17 +1009,7 @@ def get_all_data():
                 print(f"策略13 row 解析失敗: {ex}")
                 continue
 
-    try:
-        # 主要來源：TWSE 即時 API（上市）
-        twse_res = requests.get("https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
-                                headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-        twse_data = twse_res.json()
-        if twse_data.get("stat") == "OK":
-            process_disposal_rows_13(twse_data.get("data", []))
-    except Exception as e:
-        print(f"策略13 TWSE 失敗: {e}")
-
-    # 補充來源：stockwarden 公開 JSON（上市＋上櫃完整20分鐘資料）
+    # 來源：stockwarden 公開 JSON（上市＋上櫃完整20分鐘資料）
     # 格式: data[股票代號][公告日] = {b:代號, h:名稱, k:開始日(民國), f:結束日(民國), g:分鐘數}
     try:
         sw_res = requests.get(
@@ -1144,15 +1134,6 @@ def get_all_data():
                 s14_seen.add(stock_id)
             except:
                 continue
-
-    try:
-        twse_res14 = requests.get("https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
-                                  headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-        twse_data14 = twse_res14.json()
-        if twse_data14.get("stat") == "OK":
-            process_disposal_rows_14(twse_data14.get("data", []))
-    except Exception as e:
-        print(f"策略14 TWSE 失敗: {e}")
 
     try:
         sw_res14 = requests.get(
