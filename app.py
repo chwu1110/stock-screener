@@ -1125,10 +1125,19 @@ def get_all_data():
                 diff_pct = (current_price - current_ma20) / current_ma20
 
                 if abs(diff_pct) <= 0.03:
+                    # 統一處置期間格式為西元年
+                    period = info["period"]
+                    try:
+                        import re
+                        def roc_to_ad(m):
+                            return str(int(m.group(1)) + 1911) + "/" + m.group(2)
+                        period = re.sub(r'(\d{3})/(\d{2}/\d{2})', roc_to_ad, period)
+                    except:
+                        pass
                     s12.append({
                         "股票代號": stock_id,
                         "股票名稱": info["name"],
-                        "處置期間": info["period"],
+                        "處置期間": period,
                         "目前股價": round(current_price, 2),
                         "20日均線": round(current_ma20, 2),
                         "偏離幅度": f"{diff_pct*100:.1f}%",
@@ -1519,7 +1528,7 @@ def home():
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
     s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
-    update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+    update_time = _cache["time"].strftime("%Y-%m-%d %H:%M") if _cache["time"] else datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
         1: {"title": "二手紅盤", "icon": "🔥", "desc": "最近一個月內，連續兩個交易日漲停的股票，依日期由新到舊排列",
