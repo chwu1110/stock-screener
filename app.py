@@ -1062,9 +1062,16 @@ def get_all_data():
             # 過濾：連續創新高月數需≥1
             if consec < 1:
                 continue
+            # 過濾：股票名稱不能空、最新月份需在近3個月內
+            stock_name = name_dict.get(stock, "")
+            if not stock_name:
+                continue
+            latest_date = pd.to_datetime(latest_month + "-01")
+            if latest_date < pd.Timestamp.now() - pd.DateOffset(months=3):
+                continue
             s13.append({
                 "股票代號": stock,
-                "股票名稱": name_dict.get(stock, ""),
+                "股票名稱": stock_name,
                 "產業別": industry_dict.get(stock, ""),
                 "最新月份": latest_month,
                 "當月營收(千)": int(latest_val),
