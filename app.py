@@ -1039,6 +1039,15 @@ def get_all_data():
                 continue
             if latest_val <= history_24.max():
                 continue
+            # 年增率
+            if len(series) >= 13:
+                prev_year_val = series.iloc[-13]
+                yoy = (latest_val - prev_year_val) / prev_year_val * 100 if prev_year_val > 0 else None
+            else:
+                yoy = None
+            # 過濾：年增率需≥30%
+            if yoy is None or yoy < 30:
+                continue
             # 計算連續創新高月數
             consec = 0
             for i in range(len(series) - 1, 0, -1):
@@ -1050,12 +1059,9 @@ def get_all_data():
                     consec += 1
                 else:
                     break
-            # 年增率
-            if len(series) >= 13:
-                prev_year_val = series.iloc[-13]
-                yoy = (latest_val - prev_year_val) / prev_year_val * 100 if prev_year_val > 0 else None
-            else:
-                yoy = None
+            # 過濾：連續創新高月數需≥1
+            if consec < 1:
+                continue
             s13.append({
                 "股票代號": stock,
                 "股票名稱": name_dict.get(stock, ""),
@@ -1063,7 +1069,7 @@ def get_all_data():
                 "最新月份": latest_month,
                 "當月營收(千)": int(latest_val),
                 "連續創新高月數": consec,
-                "年增率": f"{yoy:.1f}%" if yoy is not None else "-",
+                "年增率": f"{yoy:.1f}%",
             })
         s13.sort(key=lambda x: x["連續創新高月數"], reverse=True)
         print(f"策略13營收創新高: {len(s13)}筆")
