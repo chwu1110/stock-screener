@@ -521,32 +521,18 @@ def get_all_data():
     start_1yr = (today - timedelta(days=90)).strftime("%Y-%m-%d")  # 改為3個月，加快速度
     start_3m = (today - timedelta(days=90)).strftime("%Y-%m-%d")
 
-    # 載入處置股歷史資料（從 GitHub 讀取最新 JSON）
+    # 載入處置股歷史資料（從本地 JSON 載入，每天由排程自動更新）
     disposal_history = _disposal_history
     if not disposal_history:
-        # 優先從 GitHub 抓最新的 disposal_history.json
         try:
-            github_url = "https://raw.githubusercontent.com/chwu1110/stock-screener/main/disposal_history.json"
-            resp = requests.get(github_url, timeout=15)
-            if resp.status_code == 200 and resp.text.strip():
-                _disposal_history.update(resp.json())
+            history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
+            if os.path.exists(history_path):
+                with open(history_path, "r", encoding="utf-8") as f:
+                    _disposal_history.update(json.load(f))
                 disposal_history = _disposal_history
-                print(f"處置股歷史從 GitHub 載入：{len(disposal_history)} 天")
-            else:
-                print(f"GitHub 載入失敗: status={resp.status_code}")
+                print(f"處置股歷史從本地 JSON 載入：{len(disposal_history)} 天")
         except Exception as e:
-            print(f"從 GitHub 讀取處置股失敗: {e}")
-        # 備用：從本地 JSON 載入
-        if not disposal_history:
-            try:
-                history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
-                if os.path.exists(history_path):
-                    with open(history_path, "r", encoding="utf-8") as f:
-                        _disposal_history.update(json.load(f))
-                    disposal_history = _disposal_history
-                    print(f"處置股歷史從本地 JSON 載入：{len(disposal_history)} 天")
-            except Exception as e:
-                print(f"讀取本地處置股歷史失敗: {e}")
+            print(f"讀取處置股歷史失敗: {e}")
         # 同時立刻抓今天的資料
         update_disposal_history()
         disposal_history = _disposal_history
@@ -1573,8 +1559,7 @@ def strategy(sid):
 # 啟動排程器：每天 14:30 自動更新處置股資料
 scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 scheduler.add_job(update_disposal_history, "cron", hour=14, minute=30)
-scheduler.add_job(refresh_disposal_from_github, "cron", hour=15, minute=10)  # 15:10 從 GitHub 拉最新資料
-scheduler.add_job(lambda: _cache.update({"data": None, "time": None}), "cron", hour=15, minute=0)  # 每天15:00清快取強制重抓
+scheduler.add_job(lambda: _cache.update({"data": None, "time": None}), "cron", hour=15, minute=0)
 scheduler.start()
 
 if __name__ == "__main__":
