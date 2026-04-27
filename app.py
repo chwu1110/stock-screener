@@ -2,16 +2,96 @@ import os
 import finlab
 from finlab import data
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
 import requests
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from flask import Flask, render_template_string
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 
 FINLAB_API_KEY = "LBmwu3n0/lor77y1Z0aBH/Q0WBI6+bLJrA2TlchZAM1jb6jJaURRbaQRZRWjozwP#vip_m"
+
+# ── 處置股歷史（記憶體版，Railway 啟動時從 JSON 載入，之後每天自動更新）──
+_disposal_history = {}
+
+def _fetch_disposal_twse():
+    url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
+    stocks = {}
+    try:
+        resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15, verify=False)
+        d = resp.json()
+        if d.get("stat") == "OK":
+            for row in d.get("data", []):
+                try:
+                    sid  = row[2].strip()
+                    name = row[3].strip()
+                    period  = row[6].strip() if len(row) > 6 else ""
+                    content = row[8].strip() if len(row) > 8 else ""
+                    if sid and sid not in stocks:
+                        stocks[sid] = {"name": name, "period": period,
+                                       "is_20min": "二十分鐘" in content, "market": "上市"}
+                except:
+                    continue
+    except Exception as e:
+        print(f"處置股上市抓取失敗: {e}")
+    return stocks
+
+def _fetch_disposal_otc():
+    urls = [
+        "https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
+        "https://www.tpex.org.tw/rwd/zh/announcement/punish?response=json",
+    ]
+    stocks = {}
+    for url in urls:
+        try:
+            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15, verify=False)
+            if resp.status_code != 200:
+                continue
+            d = resp.json()
+            rows = d.get("aaData", d.get("data", []))
+            for row in rows:
+                try:
+                    sid  = str(row[2]).strip()
+                    name = str(row[3]).strip()
+                    period  = str(row[6]).strip() if len(row) > 6 else ""
+                    content = str(row[8]).strip() if len(row) > 8 else ""
+                    if sid and sid not in stocks:
+                        stocks[sid] = {"name": name, "period": period,
+                                       "is_20min": "二十分鐘" in content, "market": "上櫃"}
+                except:
+                    continue
+            if stocks:
+                break
+        except Exception as e:
+            print(f"處置股上櫃抓取失敗: {e}")
+    return stocks
+
+def update_disposal_history():
+    """每天自動抓處置股資料存入記憶體，並同步到 disposal_history.json"""
+    global _disposal_history
+    today_str = date.today().strftime("%Y-%m-%d")
+    print(f"[排程] 更新處置股資料 {today_str}...")
+    twse = _fetch_disposal_twse()
+    otc  = _fetch_disposal_otc()
+    stocks = {**twse, **otc}
+    if stocks:
+        _disposal_history[today_str] = stocks
+        # 清除65天以前的資料
+        cutoff = (date.today() - timedelta(days=65)).strftime("%Y-%m-%d")
+        _disposal_history = {d: v for d, v in _disposal_history.items() if d >= cutoff}
+        # 同步寫回 JSON（讓重啟後不會遺失）
+        try:
+            history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
+            with open(history_path, "w", encoding="utf-8") as f:
+                json.dump(_disposal_history, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"寫入 disposal_history.json 失敗: {e}")
+        print(f"[排程] 處置股更新完成，共 {len(stocks)} 檔")
+    else:
+        print("[排程] 今天沒有抓到處置股資料")
 
 HOME_TEMPLATE = """
 <!DOCTYPE html>
@@ -414,17 +494,22 @@ def get_all_data():
     start_1yr = (today - timedelta(days=90)).strftime("%Y-%m-%d")  # 改為3個月，加快速度
     start_3m = (today - timedelta(days=90)).strftime("%Y-%m-%d")
 
-    # 載入處置股歷史資料（由 save_disposal.py 每天更新）
-    disposal_history = {}
-    try:
-        history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
-        print(f"處置股歷史路徑: {history_path}, 存在: {os.path.exists(history_path)}")
-        if os.path.exists(history_path):
-            with open(history_path, "r", encoding="utf-8") as f:
-                disposal_history = json.load(f)
-            print(f"處置股歷史天數: {len(disposal_history)}, 含7721: {'7721' in str(disposal_history)}")
-    except Exception as e:
-        print(f"讀取處置股歷史失敗: {e}")
+    # 載入處置股歷史資料（從記憶體取，每天由排程自動更新）
+    disposal_history = _disposal_history
+    if not disposal_history:
+        # 第一次啟動：嘗試從 JSON 載入
+        try:
+            history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
+            if os.path.exists(history_path):
+                with open(history_path, "r", encoding="utf-8") as f:
+                    _disposal_history.update(json.load(f))
+                disposal_history = _disposal_history
+                print(f"處置股歷史從 JSON 載入：{len(disposal_history)} 天")
+        except Exception as e:
+            print(f"讀取處置股歷史失敗: {e}")
+        # 同時立刻抓今天的資料
+        update_disposal_history()
+        disposal_history = _disposal_history
 
     # 整合兩個月內的歷史處置股
     two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
@@ -1444,6 +1529,12 @@ def strategy(sid):
 
     s = strategies[sid]
     return render_template_string(DETAIL_TEMPLATE, update_time=update_time, **s)
+
+# 啟動排程器：每天 14:30 自動更新處置股資料
+scheduler = BackgroundScheduler(timezone="Asia/Taipei")
+scheduler.add_job(update_disposal_history, "cron", hour=14, minute=30)
+scheduler.add_job(lambda: _cache.update({"data": None, "time": None}), "cron", hour=15, minute=0)  # 每天15:00清快取強制重抓
+scheduler.start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

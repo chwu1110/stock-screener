@@ -1,6 +1,8 @@
-finlab
 flask
+finlab
 pandas
-gunicorn
 requests
+urllib3
+apscheduler
+gunicorn
 pytz
