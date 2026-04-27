@@ -1,6 +1,6 @@
-"""
-每天收盤後自動抓處置股資料，存到 disposal_history.json，然後 push 到 GitHub
-建議設定 Windows 排程每天 14:00 執行
+﻿"""
+瘥予?嗥敺???蔭?∟???摮 disposal_history.json嚗敺?push ??GitHub
+撱箄降閮剖? Windows ??瘥予 14:00 ?瑁?
 """
 
 import requests
@@ -11,7 +11,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from datetime import datetime, date, timedelta
 
-# 自動偵測路徑（家裡 or 辦公室）
+# ?芸??菜葫頝臬?嚗振鋆?or 颲血摰歹?
 _possible_dirs = [
     r"C:\Users\wu\stock-screener",
     r"C:\Users\chaow\stock_project",
@@ -33,7 +33,7 @@ def save_history(history):
         json.dump(history, f, ensure_ascii=False, indent=2)
 
 def fetch_twse():
-    """抓取上市處置股清單（含20分鐘標記）"""
+    """??銝??蔭?⊥??殷???0??璅?嚗?""
     url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
     headers = {"User-Agent": "Mozilla/5.0"}
     stocks = {}
@@ -47,24 +47,24 @@ def fetch_twse():
                     stock_name = row[3].strip()
                     period     = row[6].strip() if len(row) > 6 else ""
                     content    = row[8].strip() if len(row) > 8 else ""
-                    is_20min   = "二十分鐘" in content
+                    is_20min   = "鈭???" in content
                     if stock_id and stock_id not in stocks:
                         stocks[stock_id] = {
                             "name": stock_name,
                             "period": period,
                             "is_20min": is_20min,
-                            "market": "上市"
+                            "market": "銝?"
                         }
                 except:
                     continue
-        print(f"  上市：共 {len(stocks)} 檔，其中20分鐘 {sum(1 for v in stocks.values() if v['is_20min'])} 檔")
+        print(f"  銝?嚗 {len(stocks)} 瑼??嗡葉20?? {sum(1 for v in stocks.values() if v['is_20min'])} 瑼?)
     except Exception as e:
-        print(f"  上市抓取失敗: {e}")
+        print(f"  銝???憭望?: {e}")
     return stocks
 
 def fetch_otc():
-    """抓取上櫃處置股清單（含20分鐘標記）"""
-    # 嘗試多個可能的 TPEX 網址
+    """??銝??蔭?⊥??殷???0??璅?嚗?""
+    # ?岫憭?賜? TPEX 蝬脣?
     urls = [
         "https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
         "https://www.tpex.org.tw/rwd/zh/announcement/punish?response=json",
@@ -86,75 +86,76 @@ def fetch_otc():
                     stock_name = str(row[3]).strip()
                     period     = str(row[6]).strip() if len(row) > 6 else ""
                     content    = str(row[8]).strip() if len(row) > 8 else ""
-                    is_20min   = "二十分鐘" in content
+                    is_20min   = "鈭???" in content
                     if stock_id and stock_id not in stocks:
                         stocks[stock_id] = {
                             "name": stock_name,
                             "period": period,
                             "is_20min": is_20min,
-                            "market": "上櫃"
+                            "market": "銝?"
                         }
                 except:
                     continue
             if stocks:
-                print(f"  上櫃：共 {len(stocks)} 檔，其中20分鐘 {sum(1 for v in stocks.values() if v['is_20min'])} 檔")
+                print(f"  銝?嚗 {len(stocks)} 瑼??嗡葉20?? {sum(1 for v in stocks.values() if v['is_20min'])} 瑼?)
                 break
         except Exception as e:
-            print(f"  上櫃 {url} 失敗: {e}")
+            print(f"  銝? {url} 憭望?: {e}")
             continue
     if not stocks:
-        print("  上櫃：無法抓取")
+        print("  銝?嚗瘜???)
     return stocks
 
 def git_push():
-    """把更新後的 JSON push 到 GitHub"""
+    """??啣???JSON push ??GitHub"""
     try:
         subprocess.run(["git", "add", "disposal_history.json"], cwd=REPO_DIR, check=True)
-        subprocess.run(["git", "commit", "-m", f"data: 更新處置股資料 {date.today()}"], cwd=REPO_DIR, check=True)
+        subprocess.run(["git", "commit", "-m", f"data: ?湔?蔭?∟???{date.today()}"], cwd=REPO_DIR, check=True)
         subprocess.run(["git", "push"], cwd=REPO_DIR, check=True)
-        print("✅ 已推送到 GitHub")
+        print("??撌脫? GitHub")
     except subprocess.CalledProcessError as e:
         if "nothing to commit" in str(e):
-            print("⚠️ 今天的資料已存在，不需要 push")
+            print("?? 隞予???歇摮嚗??閬?push")
         else:
-            print(f"❌ Push 失敗: {e}")
+            print(f"??Push 憭望?: {e}")
 
 def main():
     today_str = date.today().strftime("%Y-%m-%d")
-    print(f"[{datetime.now().strftime('%H:%M')}] 開始抓取處置股資料...")
+    print(f"[{datetime.now().strftime('%H:%M')}] ?????蔭?∟???..")
 
-    # 載入歷史
+    # 頛甇瑕
     history = load_history()
 
-    # 抓今天的資料（上市＋上櫃合併）
-    print("抓取上市...")
+    # ??憭拍?鞈?嚗?撣?銝??蔥嚗?
+    print("??銝?...")
     twse_stocks = fetch_twse()
-    print("抓取上櫃...")
+    print("??銝?...")
     otc_stocks = fetch_otc()
 
-    stocks = {**twse_stocks, **otc_stocks}  # 上市優先，上櫃補充
+    stocks = {**twse_stocks, **otc_stocks}  # 銝??芸?嚗?瑹???
 
     if not stocks:
-        print("❌ 今天沒有抓到資料，中止")
+        print("??隞予瘝??鞈?嚗葉甇?)
         return
 
-    # 存入歷史（以日期為key）
+    # 摮甇瑕嚗誑?交??榭ey嚗?
     history[today_str] = stocks
     count_20 = sum(1 for v in stocks.values() if v.get("is_20min"))
-    print(f"✅ 今天共 {len(stocks)} 檔處置股，其中20分鐘 {count_20} 檔")
+    print(f"??隞予??{len(stocks)} 瑼?蝵株嚗銝?0?? {count_20} 瑼?)
 
-    # 清除超過 65 天的資料
+    # 皜頞? 65 憭拍?鞈?
     cutoff = (date.today() - timedelta(days=65)).strftime("%Y-%m-%d")
     old_count = len(history)
     history = {d: v for d, v in history.items() if d >= cutoff}
-    print(f"🧹 清除舊資料：{old_count - len(history)} 筆，剩餘 {len(history)} 天")
+    print(f"?完 皜????{old_count - len(history)} 蝑??拚? {len(history)} 憭?)
 
-    # 存檔
+    # 摮?
     save_history(history)
-    print(f"💾 已儲存到 {HISTORY_FILE}")
+    print(f"? 撌脣摮 {HISTORY_FILE}")
 
-    # Push 到 GitHub
+    # Push ??GitHub
     git_push()
 
 if __name__ == "__main__":
     main()
+
