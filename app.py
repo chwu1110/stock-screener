@@ -545,7 +545,7 @@ def get_all_data():
             for sid, info in stocks.items():
                 if sid not in disposal_stocks_2m:
                     disposal_stocks_2m[sid] = info
-    print(f"兩個月內處置股數: {len(disposal_stocks_2m)}, 含7721: {'7721' in disposal_stocks_2m}")
+    print(f"兩個月內處置股數: {len(disposal_stocks_2m)}, 含7721: {'7721' in disposal_stocks_2m}, 含6693: {'6693' in disposal_stocks_2m}")
 
     # 存進全域，供即時策略12使用
     global _global_disposal_2m
