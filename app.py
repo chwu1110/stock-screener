@@ -82,6 +82,8 @@ def _fetch_disposal_otc():
 
 def refresh_disposal_from_github():
     """每天從 GitHub 重新載入最新的處置股歷史"""
+def refresh_disposal_from_github():
+    """每天從 GitHub 重新載入最新的處置股歷史"""
     global _disposal_history
     try:
         github_url = "https://raw.githubusercontent.com/chwu1110/stock-screener/main/disposal_history.json"
@@ -93,6 +95,8 @@ def refresh_disposal_from_github():
             print(f"[排程] GitHub 載入失敗: status={resp.status_code}")
     except Exception as e:
         print(f"[排程] 從 GitHub 讀取處置股失敗: {e}")
+
+def update_disposal_history():
     """每天自動抓處置股資料存入記憶體，並同步到 disposal_history.json"""
     global _disposal_history
     today_str = date.today().strftime("%Y-%m-%d")
