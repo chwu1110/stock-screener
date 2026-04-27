@@ -11,8 +11,13 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from datetime import datetime, date, timedelta
 
-HISTORY_FILE = r"C:\Users\wu\stock-screener\disposal_history.json"
-REPO_DIR     = r"C:\Users\wu\stock-screener"
+# 自動偵測路徑（家裡 or 辦公室）
+_possible_dirs = [
+    r"C:\Users\wu\stock-screener",
+    r"C:\Users\chaow\stock_project",
+]
+REPO_DIR = next((d for d in _possible_dirs if os.path.exists(d)), os.path.dirname(os.path.abspath(__file__)))
+HISTORY_FILE = os.path.join(REPO_DIR, "disposal_history.json")
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
