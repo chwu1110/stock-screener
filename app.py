@@ -595,20 +595,10 @@ def get_all_data():
         print(f"price:最高價 載入失敗: {e}")
         high_3m = None
 
-    try:
-        vol_ = data.get("price:成交量")
-        vol_df = pd.DataFrame(vol_.values, index=pd.to_datetime(vol_.index.astype(str)), columns=vol_.columns)
-        vol_3m = vol_df[vol_df.index >= pd.to_datetime(start_3m)]
-        print("Daily usage: -- price:成交量 載入完成")
-    except Exception as e:
-        print(f"price:成交量 載入失敗: {e}")
-        vol_3m = None
-
-    global _global_open_3m, _global_high_3m, _global_low_3m, _global_vol_3m
+    global _global_open_3m, _global_high_3m, _global_low_3m
     _global_open_3m = open_df[open_df.index >= pd.to_datetime(start_3m)]
     _global_high_3m = high_3m
     _global_low_3m  = low_3m
-    _global_vol_3m  = vol_3m
 
     def gap_stars(stock, dates):
         """判斷是否為跳空漲停（一價到底）：開盤＝漲停價 且 最低＝漲停價"""
@@ -1139,9 +1129,8 @@ _global_close_3m = None
 _global_open_3m = None
 _global_high_3m = None
 _global_low_3m = None
-_global_vol_3m = None
 
-def build_chart_data(s, close_3m, open_3m, high_3m, low_3m, vol_3m=None):
+def build_chart_data(s, close_3m, open_3m, high_3m, low_3m):
     try:
         stock_id = s["股票代號"]
         if close_3m is None or stock_id not in close_3m.columns:
@@ -1195,7 +1184,6 @@ def build_chart_data(s, close_3m, open_3m, high_3m, low_3m, vol_3m=None):
             "open":   get_ohlc(open_3m, idx_list),
             "high":   get_ohlc(high_3m, idx_list),
             "low":    get_ohlc(low_3m, idx_list),
-            "vol":    get_ohlc(vol_3m, idx_list),
             "ma10":   to_list(chart_ma10),
             "ma20":   to_list(chart_ma20),
             "disposal_start_idx": disposal_start_idx,
@@ -1616,11 +1604,9 @@ def strategy13():
     open_3m  = _global_open_3m
     high_3m  = _global_high_3m
     low_3m   = _global_low_3m
-    vol_3m   = _global_vol_3m
-
     # 為每支股票準備走勢圖資料（處置前5天 + 處置期間）
     for s in s13:
-        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m, vol_3m)
+        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m)
     return render_template_string(STRATEGY13_TEMPLATE, stocks=s13, update_time=update_time)
 
 STRATEGY14_TEMPLATE = """
@@ -1876,10 +1862,8 @@ def strategy14():
     open_3m  = _global_open_3m
     high_3m  = _global_high_3m
     low_3m   = _global_low_3m
-    vol_3m   = _global_vol_3m
-
     for s in s14:
-        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m, vol_3m)
+        s["chart_data"] = build_chart_data(s, close_3m, open_3m, high_3m, low_3m)
 
     return render_template_string(STRATEGY14_TEMPLATE, stocks=s14, update_time=update_time)
 
