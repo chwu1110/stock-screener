@@ -452,6 +452,18 @@ def get_all_data():
     stock_info = data.get("company_basic_info")
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
+    # 市場別：上市/上櫃
+    market_col = None
+    for col in ["市場別", "market_type", "exchange", "上市櫃"]:
+        if col in stock_info.columns:
+            market_col = col
+            break
+    if market_col:
+        market_dict = stock_info.set_index("stock_id")[market_col].to_dict()
+    else:
+        # 用股票代號判斷：上市以1/2/3/4/5/6/8開頭，上櫃以4/5/6/8開頭但在OTC
+        # 最簡單：代號數字 < 7000 且非特殊開頭為上市，其餘上櫃
+        market_dict = {}
 
     global _global_industry_dict
     _global_industry_dict = industry_dict
@@ -1019,36 +1031,45 @@ def get_all_data():
         print(f"處置股月線錯誤: {e}")
         s12 = []
 
-    # 策略十三：營收創兩年新高
+    # 策略十三：營收創兩年新高（向量化加速）
     s13 = []
     try:
         rev_data = data.get("monthly_revenue:當月營收")
         rev_df = pd.DataFrame(rev_data.values, index=rev_data.index, columns=rev_data.columns)
         rev_df = rev_df.sort_index()
 
-        for stock in rev_df.columns:
+        # 過濾近3個月內有資料的股票
+        cutoff = pd.Timestamp.now() - pd.DateOffset(months=3)
+        valid_cols = []
+        for col in rev_df.columns:
+            s = rev_df[col].dropna()
+            if len(s) >= 13 and pd.to_datetime(str(s.index[-1])[:7] + "-01") >= cutoff:
+                valid_cols.append(col)
+        rev_df = rev_df[valid_cols]
+
+        # 向量化：滾動24個月最大值（不含當月，shift(1)）
+        rolling_max_24 = rev_df.shift(1).rolling(24, min_periods=12).max()
+        # 最新一行
+        latest_rev = rev_df.iloc[-1]
+        latest_max  = rolling_max_24.iloc[-1]
+        # 年增率
+        rev_12m_ago = rev_df.shift(12).iloc[-1]
+        yoy_series = (latest_rev - rev_12m_ago) / rev_12m_ago * 100
+
+        # 向量化：月增率
+        mom_series = (latest_rev - rev_df.shift(1).iloc[-1]) / rev_df.shift(1).iloc[-1] * 100
+
+        # 篩選：創兩年新高 + 年增率≥20%
+        mask = (latest_rev > latest_max) & (yoy_series >= 20)
+        candidates = latest_rev[mask].index.tolist()
+
+        # 計算連續創新高月數（只對通過篩選的股票做迴圈，數量少很多）
+        latest_month_str = str(rev_df.index[-1])[:7]
+        for stock in candidates:
+            stock_name = name_dict.get(stock, "")
+            if not stock_name:
+                continue
             series = rev_df[stock].dropna()
-            if len(series) < 3:
-                continue
-            # 最新月份
-            latest_val = series.iloc[-1]
-            latest_month = str(series.index[-1])[:7]
-            # 取最近24個月（不含最新）做比較基準
-            history_24 = series.iloc[:-1].tail(24)
-            if len(history_24) < 12:
-                continue
-            if latest_val <= history_24.max():
-                continue
-            # 年增率
-            if len(series) >= 13:
-                prev_year_val = series.iloc[-13]
-                yoy = (latest_val - prev_year_val) / prev_year_val * 100 if prev_year_val > 0 else None
-            else:
-                yoy = None
-            # 過濾：年增率需≥30%
-            if yoy is None or yoy < 30:
-                continue
-            # 計算連續創新高月數
             consec = 0
             for i in range(len(series) - 1, 0, -1):
                 curr = series.iloc[i]
@@ -1059,23 +1080,29 @@ def get_all_data():
                     consec += 1
                 else:
                     break
-            # 過濾：連續創新高月數需≥1
             if consec < 1:
                 continue
-            # 過濾：股票名稱不能空、最新月份需在近3個月內
-            stock_name = name_dict.get(stock, "")
-            if not stock_name:
-                continue
-            latest_date = pd.to_datetime(latest_month + "-01")
-            if latest_date < pd.Timestamp.now() - pd.DateOffset(months=3):
-                continue
+            yoy = yoy_series[stock]
+            mom = mom_series[stock]
+            market = market_dict.get(stock, "")
+            if not market:
+                # 用代號判斷
+                try:
+                    sid_int = int(stock)
+                    if sid_int < 5000 or stock.startswith("1") or stock.startswith("2") or stock.startswith("3"):
+                        market = "上市"
+                    else:
+                        market = "上櫃"
+                except:
+                    market = ""
             s13.append({
+                "市場別": market,
                 "股票代號": stock,
                 "股票名稱": stock_name,
                 "產業別": industry_dict.get(stock, ""),
-                "最新月份": latest_month,
-                "當月營收(千)": int(latest_val),
+                "最新月份": latest_month_str,
                 "連續創新高月數": consec,
+                "月增率": f"{mom:.1f}%",
                 "年增率": f"{yoy:.1f}%",
             })
         s13.sort(key=lambda x: x["連續創新高月數"], reverse=True)
@@ -1408,8 +1435,8 @@ def strategy(sid):
             "stocks": s11, "columns": ["股票代號", "股票名稱", "今日收盤", "今日漲幅", "前兩天最高", "30日高點", "30日低點", "平台區間"]},
         12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下3%以內，偏離最小的在前",
             "stocks": s12, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "20日均線", "偏離幅度"]},
-        13: {"title": "營收創兩年新高", "icon": "💰", "desc": "當月營收創近兩年新高，依連續創新高月數由多到少排列",
-            "stocks": s13, "columns": ["股票代號", "股票名稱", "產業別", "最新月份", "當月營收(千)", "連續創新高月數", "年增率"]},
+        13: {"title": "營收創兩年新高", "icon": "💰", "desc": "當月營收創近兩年新高，年增率≥20%，依連續創新高月數由多到少排列",
+            "stocks": s13, "columns": ["市場別", "股票代號", "股票名稱", "產業別", "最新月份", "連續創新高月數", "月增率", "年增率"]},
     }
 
     if sid not in strategies:
