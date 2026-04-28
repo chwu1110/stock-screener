@@ -581,7 +581,6 @@ def get_all_data():
     # 釋放原始資料節省記憶體
     del close, open_, high_, low_, stock_info
 
-    close_1yr = close_df[close_df.index >= pd.to_datetime(start_1yr)]
     close_3m = close_df[close_df.index >= pd.to_datetime(start_3m)]
 
     # 存進全域，供即時策略12使用
@@ -595,7 +594,7 @@ def get_all_data():
     low_1m  = low_df
 
     # 釋放大型 DataFrame 節省記憶體
-    del close_df, open_df, high_df, low_df
+    del close_df, open_df, high_df, low_df, close_3m
 
     def is_strong_day(stock, date, df_close, df_high, df_low, df_open=None):
         """判斷是否為強勢漲停日：一價到底(高低差≤2%) 或 開盤即漲停"""
