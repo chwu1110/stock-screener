@@ -555,11 +555,8 @@ def get_all_data():
     end_date = today.strftime("%Y-%m-%d")
 
     data.date_range = (start_3m, end_date)
-
     close = data.get("price:收盤價")
     open_ = data.get("price:開盤價")
-    high_ = data.get("price:最高價")
-    low_  = data.get("price:最低價")
     stock_info = data.get("company_basic_info")
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
@@ -572,17 +569,24 @@ def get_all_data():
     if market_col:
         market_dict = stock_info.set_index("stock_id")[market_col].to_dict()
     else:
-        # 用股票代號判斷：上市以1/2/3/4/5/6/8開頭，上櫃以4/5/6/8開頭但在OTC
-        # 最簡單：代號數字 < 7000 且非特殊開頭為上市，其餘上櫃
         market_dict = {}
 
     global _global_industry_dict
     _global_industry_dict = industry_dict
 
+    # 高低價只抓1個月（只用於星星標記）
+    data.date_range = (start_1m, end_date)
+    high_ = data.get("price:最高價")
+    low_  = data.get("price:最低價")
+    data.date_range = (start_3m, end_date)  # 還原
+
     close_df = pd.DataFrame(close.values, index=pd.to_datetime(close.index.astype(str)), columns=close.columns)
     open_df = pd.DataFrame(open_.values, index=pd.to_datetime(open_.index.astype(str)), columns=open_.columns)
     high_df = pd.DataFrame(high_.values, index=pd.to_datetime(high_.index.astype(str)), columns=high_.columns)
     low_df  = pd.DataFrame(low_.values,  index=pd.to_datetime(low_.index.astype(str)),  columns=low_.columns)
+
+    # 釋放原始資料節省記憶體
+    del close, open_, high_, low_, stock_info
 
     close_1yr = close_df[close_df.index >= pd.to_datetime(start_1yr)]
     close_3m = close_df[close_df.index >= pd.to_datetime(start_3m)]
@@ -594,8 +598,11 @@ def get_all_data():
     close_1m = close_df[close_df.index >= pd.to_datetime(start_1m)]
     close_2026 = close_df[close_df.index >= pd.to_datetime(start_2026)]
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
-    high_1m = high_df[high_df.index >= pd.to_datetime(start_1m)]
-    low_1m  = low_df[low_df.index  >= pd.to_datetime(start_1m)]
+    high_1m = high_df
+    low_1m  = low_df
+
+    # 釋放大型 DataFrame 節省記憶體
+    del close_df, open_df, high_df, low_df
 
     def is_strong_day(stock, date, df_close, df_high, df_low, df_open=None):
         """判斷是否為強勢漲停日：一價到底(高低差≤2%) 或 開盤即漲停"""
