@@ -218,13 +218,6 @@ HOME_TEMPLATE = """
             <div class="card-count-label">符合股票數</div>
             <div style="margin-top:10px;font-size:12px;color:#38bdf8;">🔴 <a href="/strategy/12/realtime" style="color:#38bdf8;">即時版（盤中）</a></div>
         </a>
-        <a href="/strategy/13" class="card">
-            <div class="card-icon">💰</div>
-            <div class="card-title">營收創兩年新高</div>
-            <div class="card-desc">當月營收創近兩年新高，依連續創新高月數排列</div>
-            <div class="card-count">{{ counts[12] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
     </div>
 
     <p class="updated">資料來源：FinLab｜{{ update_time }}</p>
@@ -1166,86 +1159,6 @@ def get_all_data():
         print(f"處置股月線錯誤: {e}")
         s12 = []
 
-    # 策略十三：營收創兩年新高（向量化加速）
-    s13 = []
-    try:
-        rev_data = data.get("monthly_revenue:當月營收")
-        rev_df = pd.DataFrame(rev_data.values, index=rev_data.index, columns=rev_data.columns)
-        rev_df = rev_df.sort_index()
-
-        # 過濾近3個月內有資料的股票
-        cutoff = pd.Timestamp.now() - pd.DateOffset(months=3)
-        valid_cols = []
-        for col in rev_df.columns:
-            s = rev_df[col].dropna()
-            if len(s) >= 13 and pd.to_datetime(str(s.index[-1])[:7] + "-01") >= cutoff:
-                valid_cols.append(col)
-        rev_df = rev_df[valid_cols]
-
-        # 向量化：滾動24個月最大值（不含當月，shift(1)）
-        rolling_max_24 = rev_df.shift(1).rolling(24, min_periods=12).max()
-        # 最新一行
-        latest_rev = rev_df.iloc[-1]
-        latest_max  = rolling_max_24.iloc[-1]
-        # 年增率
-        rev_12m_ago = rev_df.shift(12).iloc[-1]
-        yoy_series = (latest_rev - rev_12m_ago) / rev_12m_ago * 100
-
-        # 向量化：月增率
-        mom_series = (latest_rev - rev_df.shift(1).iloc[-1]) / rev_df.shift(1).iloc[-1] * 100
-
-        # 篩選：創兩年新高 + 年增率≥20%
-        mask = (latest_rev > latest_max) & (yoy_series >= 20)
-        candidates = latest_rev[mask].index.tolist()
-
-        # 計算連續創新高月數（只對通過篩選的股票做迴圈，數量少很多）
-        latest_month_str = str(rev_df.index[-1])[:7]
-        for stock in candidates:
-            stock_name = name_dict.get(stock, "")
-            if not stock_name:
-                continue
-            series = rev_df[stock].dropna()
-            consec = 0
-            for i in range(len(series) - 1, 0, -1):
-                curr = series.iloc[i]
-                hist = series.iloc[:i].tail(24)
-                if len(hist) < 12:
-                    break
-                if curr > hist.max():
-                    consec += 1
-                else:
-                    break
-            if consec < 1:
-                continue
-            yoy = yoy_series[stock]
-            mom = mom_series[stock]
-            market = market_dict.get(stock, "")
-            if not market:
-                # 用代號判斷
-                try:
-                    sid_int = int(stock)
-                    if sid_int < 5000 or stock.startswith("1") or stock.startswith("2") or stock.startswith("3"):
-                        market = "上市"
-                    else:
-                        market = "上櫃"
-                except:
-                    market = ""
-            s13.append({
-                "市場別": market,
-                "股票代號": stock,
-                "股票名稱": stock_name,
-                "產業別": industry_dict.get(stock, ""),
-                "最新月份": latest_month_str,
-                "連續創新高月數": consec,
-                "月增率": f"{mom:.1f}%",
-                "年增率": f"{yoy:.1f}%",
-            })
-        s13.sort(key=lambda x: x["連續創新高月數"], reverse=True)
-        print(f"策略13營收創新高: {len(s13)}筆")
-    except Exception as e:
-        print(f"策略13錯誤: {e}")
-        s13 = []
-
     # 存進全域供監控頁面使用
     global _global_s1, _global_s2, _global_s3, _global_s4, _global_s5, _global_s6, _global_s7, _global_s10, _global_s12
     _global_s1  = s1
@@ -1258,7 +1171,7 @@ def get_all_data():
     _global_s10 = s10
     _global_s12 = s12
 
-    return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13
+    return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12
 
 
 
@@ -1536,13 +1449,13 @@ def monitor():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9), len(s10), len(s11), len(s12), len(s13)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9), len(s10), len(s11), len(s12)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = get_cached_data()
     update_time = _cache["time"].strftime("%Y-%m-%d %H:%M") if _cache["time"] else datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
