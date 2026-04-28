@@ -787,6 +787,14 @@ def get_all_data():
     s6 = list(s6_dict.values())
     s6.sort(key=lambda x: x["第五天"], reverse=True)
 
+    # 去重：股票只出現在最高等級（五手 > 四手 > 三手 > 二手）
+    s6_stocks = {x["股票代號"] for x in s6}
+    s5_stocks = {x["股票代號"] for x in s5}
+    s4_stocks = {x["股票代號"] for x in s4}
+    s5 = [x for x in s5 if x["股票代號"] not in s6_stocks]
+    s4 = [x for x in s4 if x["股票代號"] not in s6_stocks and x["股票代號"] not in s5_stocks]
+    s1 = [x for x in s1 if x["股票代號"] not in s6_stocks and x["股票代號"] not in s5_stocks and x["股票代號"] not in s4_stocks]
+
     # 策略七：處置股跌破10日線（每次跌破列一筆）
     s7 = []
     try:
