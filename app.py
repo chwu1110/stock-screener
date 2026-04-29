@@ -659,7 +659,7 @@ def get_all_data():
                     hist_price = prices.iloc[-1]
                     current_ma10 = ma10.iloc[-1]
                     current_ma20 = ma20.iloc[-1]
-                    high_10d = prices.iloc[-10:].max() if len(prices) >= 10 else prices.max()
+                    high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
 
                     if pd.isna(current_ma10) or pd.isna(current_ma20):
                         continue
@@ -672,7 +672,7 @@ def get_all_data():
                         "處置期間": date_period_ad,
                         "處置第幾天": f"第{today_idx}天",
                         "昨收": round(hist_price, 2),
-                        "10日高點": round(high_10d, 2),
+                        "20日高點": round(high_10d, 2),
                         "10日均線": round(current_ma10, 2),
                         "20日均線": round(current_ma20, 2),
                         "_below_ma10": hist_price < current_ma10,
@@ -706,10 +706,10 @@ def get_all_data():
                             prices_with_today.iloc[-1] = rt_price
                         new_ma10 = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
                         new_ma20 = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
-                        high_10d = round(prices_with_today.iloc[-10:].max(), 2)
+                        high_10d = round(prices_with_today.iloc[-20:].max(), 2)
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
-                        item["10日高點"] = high_10d
+                        item["20日高點"] = high_10d
                         item["_below_ma10"] = rt_price < new_ma10
                     except Exception as e:
                         print(f"重新計算均線失敗 {sid}: {e}")
@@ -891,7 +891,7 @@ def strategy(sid):
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: None,  # 懶載入，下方單獨處理
         14: {"title": "處置第五天", "icon": "📅", "desc": "目前正在被處置的股票，今天是處置後第3到第5個交易日",
-            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "處置第幾天", "即時股價", "昨收", "10日高點", "10日均線", "20日均線"],
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "處置第幾天", "即時股價", "昨收", "20日高點", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7b if x.get("_below_ma10")}},
     }
 
