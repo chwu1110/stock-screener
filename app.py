@@ -770,10 +770,11 @@ def get_all_data():
         if disposal_data.get("stat") == "OK":
             for row in disposal_data.get("data", []):
                 try:
-                    stock_id = row[2].strip()
+                    stock_id   = row[2].strip()
                     stock_name = row[3].strip()
-                    period = row[5].strip() if len(row) > 5 else ""
-                    disposal_stocks[stock_id] = {"name": stock_name, "period": period}
+                    date_period = row[6].strip() if len(row) > 6 else ""  # 處置期間（日期）
+                    reason     = row[5].strip() if len(row) > 5 else ""   # 處置原因
+                    disposal_stocks[stock_id] = {"name": stock_name, "period": date_period, "reason": reason}
                 except:
                     continue
 
