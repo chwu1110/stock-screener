@@ -659,13 +659,16 @@ def get_all_data():
             return str(int(m.group(1)) + 1911) + "/" + m.group(2)
 
         if disposal_data2.get("stat") == "OK":
-            for row in disposal_data2.get("data", []):
+            rows = disposal_data2.get("data", [])
+            print(f"處置第五天：共{len(rows)}筆處置股資料")
+            for row in rows:
                 try:
                     stock_id   = row[2].strip()
                     stock_name = row[3].strip()
                     date_period = row[6].strip() if len(row) > 6 else ""
                     parts = date_period.replace(" ", "").split("~")
                     if len(parts) != 2:
+                        print(f"  {stock_id} 日期格式錯誤: {date_period}")
                         continue
                     start_date = roc_to_date2(parts[0])
 
@@ -685,6 +688,8 @@ def get_all_data():
                         if d >= today_ts:
                             today_idx = i + 1
                             break
+
+                    print(f"  {stock_id} 開始:{str(start_date)[:10]} 交易天數:{len(trading_days)} 今天第{today_idx}天")
 
                     if today_idx is None or today_idx < 3 or today_idx > 5:
                         continue
