@@ -682,14 +682,14 @@ def get_all_data():
                     if len(trading_days) < 3:
                         continue
 
+                    # 用最近的交易日判斷是第幾天（FinLab資料到昨天）
                     today_ts = pd.Timestamp(today)
-                    today_idx = None
-                    for i, d in enumerate(trading_days):
-                        if d >= today_ts:
-                            today_idx = i + 1
-                            break
+                    today_idx = len(trading_days)  # 到今天為止共幾個交易日
+                    # 如果最後一個交易日是今天或之前，就是該天數
+                    # 實際上因為FinLab資料只到昨天，today_idx = 昨天是第幾天+1
+                    today_idx = len(trading_days) + 1 if trading_days[-1] < today_ts else len(trading_days)
 
-                    print(f"  {stock_id} 開始:{str(start_date)[:10]} 交易天數:{len(trading_days)} 今天第{today_idx}天")
+                    print(f"  {stock_id} 開始:{str(start_date)[:10]} 交易天數:{len(trading_days)} 估計今天第{today_idx}天")
 
                     if today_idx is None or today_idx < 3 or today_idx > 5:
                         continue
