@@ -66,18 +66,23 @@ def _fetch_disposal_otc():
             if isinstance(data, list) and data:
                 for row in data:
                     try:
-                        sid   = str(row.get("SecuritiesCompanyCode", "")).strip()
-                        name  = str(row.get("CompanyName", "")).strip()
-                        start = str(row.get("DisposalStartDate", "")).strip()
-                        end   = str(row.get("DisposalEndDate", "")).strip()
-                        def to_ad(s):
-                            s = s.replace("-", "/")
-                            parts = s.split("/")
-                            if len(parts[0]) == 3:
-                                return f"{int(parts[0])+1911}/{parts[1]}/{parts[2]}"
+                        sid    = str(row.get("SecuritiesCompanyCode", "")).strip()
+                        name   = str(row.get("CompanyName", "")).strip()
+                        dp     = str(row.get("DisposalPeriod", "")).strip()
+                        def roc_yyyymmdd_to_ad(s):
+                            s = s.strip()
+                            if len(s) == 7:
+                                y = int(s[:3]) + 1911
+                                m = s[3:5]
+                                d = s[5:7]
+                                return f"{y}/{m}/{d}"
                             return s
-                        period = f"{to_ad(start)}~{to_ad(end)}" if start and end else ""
-                        is_20min = "20" in str(row.get("DisposalMethod", ""))
+                        if "~" in dp:
+                            pts = dp.split("~")
+                            period = f"{roc_yyyymmdd_to_ad(pts[0])}~{roc_yyyymmdd_to_ad(pts[1])}"
+                        else:
+                            period = dp
+                        is_20min = "20分鐘" in str(row.get("DisposalCondition", ""))
                         if sid and sid not in stocks:
                             stocks[sid] = {"name": name, "period": period,
                                            "is_20min": is_20min, "market": "上櫃"}
