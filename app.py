@@ -704,8 +704,13 @@ def get_all_data():
                     continue
                 end_date_str = end_date_ts.strftime("%Y/%m/%d")
 
+                # 過濾已出關的股票
+                if end_date_ts < pd.Timestamp(today.date()):
+                    continue
+
                 if stock_id not in close_3m.columns:
-                    print(f"  跳過 {stock_id}：不在 close_3m")
+                    if stock_id in ["7711", "1591"]:
+                        print(f"  [{stock_id}] 不在 close_3m")
                     continue
                 prices = close_3m[stock_id].dropna()
                 if len(prices) < 20:
