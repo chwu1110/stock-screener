@@ -643,12 +643,80 @@ def get_all_data():
         print(f"處置股API失敗: {e}")
         s7 = []
 
+    # 策略七B：處置第五天（第3~5個交易日）
+    s7b = []
+    try:
+        disposal_url2 = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
+        disposal_res2 = requests.get(disposal_url2, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
+        disposal_data2 = disposal_res2.json()
 
-    s8 = []   # 策略八已移除
-    s9 = []   # 策略九已移除
-    s10 = []  # 策略十已移除
-    s11 = []  # 策略十一已移除
-    s12 = []  # 策略十二已移除
+        def roc_to_date2(s):
+            y, m, d = s.strip().split("/")
+            return pd.Timestamp(int(y)+1911, int(m), int(d))
+
+        import re
+        def roc_to_ad(m):
+            return str(int(m.group(1)) + 1911) + "/" + m.group(2)
+
+        if disposal_data2.get("stat") == "OK":
+            for row in disposal_data2.get("data", []):
+                try:
+                    stock_id   = row[2].strip()
+                    stock_name = row[3].strip()
+                    date_period = row[6].strip() if len(row) > 6 else ""
+                    parts = date_period.replace(" ", "").split("~")
+                    if len(parts) != 2:
+                        continue
+                    start_date = roc_to_date2(parts[0])
+
+                    if stock_id not in close_3m.columns:
+                        continue
+                    prices = close_3m[stock_id].dropna()
+                    if len(prices) < 20:
+                        continue
+
+                    trading_days = prices.index[prices.index >= start_date]
+                    if len(trading_days) < 3:
+                        continue
+
+                    today_ts = pd.Timestamp(today)
+                    today_idx = None
+                    for i, d in enumerate(trading_days):
+                        if d >= today_ts:
+                            today_idx = i + 1
+                            break
+
+                    if today_idx is None or today_idx < 3 or today_idx > 5:
+                        continue
+
+                    ma10 = prices.rolling(10).mean()
+                    ma20 = prices.rolling(20).mean()
+                    current_price = prices.iloc[-1]
+                    current_ma10 = ma10.iloc[-1]
+                    current_ma20 = ma20.iloc[-1]
+
+                    if pd.isna(current_ma10) or pd.isna(current_ma20):
+                        continue
+
+                    date_period_ad = re.sub(r'(\d{3})/(\d{2}/\d{2})', roc_to_ad, date_period)
+
+                    s7b.append({
+                        "股票代號": stock_id,
+                        "股票名稱": stock_name,
+                        "處置期間": date_period_ad,
+                        "處置第幾天": f"第{today_idx}天",
+                        "目前股價": round(current_price, 2),
+                        "10日均線": round(current_ma10, 2),
+                        "20日均線": round(current_ma20, 2),
+                    })
+                except:
+                    continue
+
+        s7b.sort(key=lambda x: x["處置第幾天"])
+        print(f"處置第五天: {len(s7b)}筆")
+    except Exception as e:
+        print(f"處置第五天錯誤: {e}")
+        s7b = []
 
     # 存進全域供監控頁面使用
     global _global_s1, _global_s3, _global_s4, _global_s5, _global_s6, _global_s7
