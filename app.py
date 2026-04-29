@@ -874,15 +874,18 @@ def get_all_data():
 
                     # 找處置開始後的交易日序列
                     trading_days = prices.index[prices.index >= start_date]
-                    if len(trading_days) < 5:
+                    if len(trading_days) < 3:
                         continue
 
-                    # 第5個交易日
-                    day5 = trading_days[4]
-
-                    # 判斷今天是否是第5天（允許±1天誤差）
+                    # 今天是處置後第幾天
                     today_ts = pd.Timestamp(today)
-                    if abs((day5 - today_ts).days) > 1:
+                    today_idx = None
+                    for i, d in enumerate(trading_days):
+                        if d >= today_ts:
+                            today_idx = i + 1  # 第幾天（從1開始）
+                            break
+
+                    if today_idx is None or today_idx < 3 or today_idx > 5:
                         continue
 
                     # 計算10日和20日均線
@@ -905,7 +908,7 @@ def get_all_data():
                         "股票代號": stock_id,
                         "股票名稱": stock_name,
                         "處置期間": date_period_ad,
-                        "第五天日期": str(day5)[:10],
+                        "處置第幾天": f"第{today_idx}天",
                         "目前股價": round(current_price, 2),
                         "10日均線": round(current_ma10, 2),
                         "20日均線": round(current_ma20, 2),
@@ -913,7 +916,7 @@ def get_all_data():
                 except:
                     continue
 
-        s7b.sort(key=lambda x: x["股票代號"])
+        s7b.sort(key=lambda x: x["處置第幾天"])
         print(f"處置第五天: {len(s7b)}筆")
     except Exception as e:
         print(f"處置第五天錯誤: {e}")
@@ -1481,8 +1484,8 @@ def strategy(sid):
             "stocks": s11, "columns": ["股票代號", "股票名稱", "今日收盤", "今日漲幅", "前兩天最高", "30日高點", "30日低點", "平台區間"]},
         12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下3%以內，偏離最小的在前",
             "stocks": s12, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "20日均線", "偏離幅度"]},
-        14: {"title": "處置第五天", "icon": "📅", "desc": "目前正在被處置的股票，今天剛好是處置後第5個交易日",
-            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "第五天日期", "目前股價", "10日均線", "20日均線"]},
+        14: {"title": "處置第五天", "icon": "📅", "desc": "目前正在被處置的股票，今天是處置後第3到第5個交易日",
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "處置第幾天", "目前股價", "10日均線", "20日均線"]},
     }
 
     if sid not in strategies:
