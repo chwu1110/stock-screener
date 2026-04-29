@@ -338,7 +338,7 @@ _realtime_cache = {"prices": {}, "time": None}
 def get_realtime_prices(stock_ids):
     """用 Fugle API 抓即時股價（5分鐘快取）"""
     now = datetime.now().replace(tzinfo=None)
-    if _realtime_cache["time"] and (now - _realtime_cache["time"]).seconds < 300:
+    if _realtime_cache["time"] and (now - _realtime_cache["time"]).total_seconds() < 300:
         return _realtime_cache["prices"]
 
     prices = {}
@@ -740,7 +740,7 @@ _global_s7 = []
 
 def get_cached_data():
     now = datetime.now()
-    if _cache["data"] is None or (now - _cache["time"]).seconds > 1800:
+    if _cache["data"] is None or (now - _cache["time"]).total_seconds() > 1800:
         _cache["data"] = get_all_data()
         _cache["time"] = now
     return _cache["data"]
@@ -758,7 +758,7 @@ _s7_cache = {"data": None, "time": None}
 def get_s7_data():
     """懶載入策略七：近兩個月處置股"""
     now = datetime.now()
-    if _s7_cache["data"] is not None and (now - _s7_cache["time"]).seconds < 1800:
+    if _s7_cache["data"] is not None and (now - _s7_cache["time"]).total_seconds() < 1800:
         return _s7_cache["data"]
 
     s7 = []
@@ -782,7 +782,8 @@ def get_s7_data():
                 hist_price = prices.iloc[-1]
                 current_ma10 = ma10.iloc[-1]
                 current_ma20 = ma20.iloc[-1]
-                high_2m = prices.max()
+                two_m_ago = pd.Timestamp(datetime.today().date()) - pd.Timedelta(days=60)
+                high_2m = prices[prices.index >= two_m_ago].max()
 
                 if pd.isna(current_ma10) or pd.isna(current_ma20):
                     continue
@@ -837,7 +838,8 @@ def get_s7_data():
                             prices_with_today.iloc[-1] = rt_price
                         new_ma10 = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
                         new_ma20 = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
-                        new_high = round(prices_with_today.max(), 2)
+                        two_m_ago = pd.Timestamp(datetime.today().date()) - pd.Timedelta(days=60)
+                        new_high = round(prices_with_today[prices_with_today.index >= two_m_ago].max(), 2)
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
                         item["2月高點"] = new_high
@@ -897,7 +899,7 @@ def strategy(sid):
 # 啟動排程器：每天 14:30 自動更新處置股資料
 scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 scheduler.add_job(update_disposal_history, "cron", hour=14, minute=30)
-scheduler.add_job(lambda: _cache.update({"data": None, "time": None}), "cron", hour=15, minute=0)
+scheduler.add_job(lambda: (_cache.update({"data": None, "time": None}), _s7_cache.update({"data": None, "time": None})), "cron", hour=15, minute=0)
 scheduler.start()
 
 if __name__ == "__main__":
