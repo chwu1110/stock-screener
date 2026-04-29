@@ -335,7 +335,7 @@ def get_twse_realtime(stock_ids):
         ids_str = "|".join(stock_ids)
         url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
         headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=10, verify=False)
         data = resp.json()
         now_str = datetime.now().strftime("%H:%M")
         for item in data.get("msgArray", []):
@@ -357,7 +357,7 @@ def get_tpex_realtime(stock_ids):
         ids_str = "|".join([f"otc_{sid}.tw" for sid in stock_ids])
         url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
         headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=10, verify=False)
         data = resp.json()
         now_str = datetime.now().strftime("%H:%M")
         for item in data.get("msgArray", []):
@@ -697,7 +697,7 @@ def get_all_data():
                 period_raw  = info.get("period", "")
                 start_date, end_date_ts, date_period_ad = parse_period(period_raw)
                 if start_date is None or end_date_ts is None:
-                    print(f"  {stock_id} 日期格式錯誤: {period_raw}")
+                    print(f"  {stock_id} 日期格式錯誤: {repr(period_raw)}")
                     continue
                 end_date_str = end_date_ts.strftime("%Y/%m/%d")
 
