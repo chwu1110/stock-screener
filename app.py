@@ -574,7 +574,7 @@ def get_all_data():
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
 
     # 釋放大型 DataFrame 節省記憶體
-    del close_df, open_df, close_3m
+    del close_df, open_df
 
     def is_strong_day(stock, date, df_close, df_high, df_low, df_open=None):
         """判斷是否為強勢漲停日：一價到底(高低差≤2%) 或 開盤即漲停"""
