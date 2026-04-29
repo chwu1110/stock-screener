@@ -787,9 +787,22 @@ def get_s7_data():
                 if pd.isna(current_ma10) or pd.isna(current_ma20):
                     continue
 
+                # 過濾20元以下
+                if hist_price < 20:
+                    continue
+
+                # 處置期間（民國轉西元）
+                period_raw = info.get("period", "")
+                try:
+                    import re as _re
+                    period_ad = _re.sub(r'(\d{3})/', lambda m: str(int(m.group(1))+1911)+'/', period_raw)
+                except:
+                    period_ad = period_raw
+
                 s7.append({
                     "股票代號": stock_id,
                     "股票名稱": info.get("name", ""),
+                    "處置期間": period_ad,
                     "昨收": round(hist_price, 2),
                     "2月高點": round(high_2m, 2),
                     "10日均線": round(current_ma10, 2),
@@ -872,7 +885,7 @@ def strategy(sid):
             "title": "近兩個月處置股", "icon": "⚠️",
             "desc": "近兩個月曾被處置的股票，顯示即時股價、兩個月高點、10日線、20日線，紅底為跌破10日線",
             "stocks": s7_lazy,
-            "columns": ["股票代號", "股票名稱", "即時股價", "昨收", "2月高點", "10日均線", "20日均線"],
+            "columns": ["股票代號", "股票名稱", "處置期間", "即時股價", "昨收", "2月高點", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7_lazy if x.get("_below_ma10")},
         }
     else:
