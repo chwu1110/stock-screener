@@ -191,8 +191,8 @@ HOME_TEMPLATE = """
         </a>
         <a href="/strategy/7" class="card">
             <div class="card-icon">⚠️</div>
-            <div class="card-title">處置股跌破10日線</div>
-            <div class="card-desc">目前正在被處置的股票，且收盤價跌破10日均線</div>
+            <div class="card-title">近兩個月處置股</div>
+            <div class="card-desc">近兩個月曾被處置的股票，即時股價 vs 兩個月高點、10日線、20日線</div>
             <div class="card-count">{{ counts[5] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
@@ -596,82 +596,75 @@ def get_all_data():
     s4 = [x for x in s4 if x["股票代號"] not in s6_stocks and x["股票代號"] not in s5_stocks]
     s1 = [x for x in s1 if x["股票代號"] not in s6_stocks and x["股票代號"] not in s5_stocks and x["股票代號"] not in s4_stocks]
 
-    # 策略七：處置股跌破10日線（每次跌破列一筆）
+    # 策略七：近兩個月處置股 — 即時股價 vs 兩個月高點、10日線、20日線
     s7 = []
     try:
-        # 抓取目前處置股清單
-        disposal_url = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
-        disposal_res = requests.get(disposal_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-        disposal_data = disposal_res.json()
-
-        disposal_stocks = {}
-        if disposal_data.get("stat") == "OK":
-            for row in disposal_data.get("data", []):
-                try:
-                    stock_id = row[2].strip()
-                    stock_name = row[3].strip()
-                    period = row[5].strip() if len(row) > 5 else ""
-                    disposal_stocks[stock_id] = {"name": stock_name, "period": period}
-                except:
-                    continue
-
-        def roc_to_date(s):
-            y, m, d = s.split("/")
-            return pd.Timestamp(int(y)+1911, int(m), int(d))
-
-        # 每支股票只留最近一次跌破
-        s7_dict = {}
-        for stock_id, info in disposal_stocks.items():
+        for stock_id, info in disposal_stocks_2m.items():
             try:
                 if stock_id not in close_3m.columns:
                     continue
                 prices = close_3m[stock_id].dropna()
-                if len(prices) < 10:
+                if len(prices) < 20:
                     continue
 
                 ma10 = prices.rolling(10).mean()
+                ma20 = prices.rolling(20).mean()
+                hist_price = prices.iloc[-1]
+                current_ma10 = ma10.iloc[-1]
+                current_ma20 = ma20.iloc[-1]
+                high_2m = prices.max()  # close_3m 約3個月，取全部視為2個月高點
 
-                # 解析處置期間（民國年轉西元年）
-                period = info.get("period", "")
-                disposal_start = None
-                disposal_end = None
-                try:
-                    parts = period.replace(" ", "").split("~")
-                    if len(parts) == 2:
-                        disposal_start = roc_to_date(parts[0])
-                        disposal_end = roc_to_date(parts[1])
-                except:
-                    pass
+                if pd.isna(current_ma10) or pd.isna(current_ma20):
+                    continue
 
-                # 找處置期間內最近一次跌破10日線
-                for date, price in reversed(list(prices.items())):
-                    ma = ma10.get(date)
-                    if pd.isna(ma):
-                        continue
-                    if disposal_start and disposal_end:
-                        if not (disposal_start <= date <= disposal_end):
-                            continue
-                    if price < ma:
-                        diff_pct = (price - ma) / ma
-                        s7_dict[stock_id] = {
-                            "股票代號": stock_id,
-                            "股票名稱": info["name"],
-                            "處置期間": period,
-                            "跌破日期": str(date)[:10],
-                            "收盤價": round(price, 2),
-                            "10日均線": round(ma, 2),
-                            "跌破幅度": f"{diff_pct*100:.1f}%",
-                        }
-                        break
+                s7.append({
+                    "股票代號": stock_id,
+                    "股票名稱": info.get("name", ""),
+                    "昨收": round(hist_price, 2),
+                    "2月高點": round(high_2m, 2),
+                    "10日均線": round(current_ma10, 2),
+                    "20日均線": round(current_ma20, 2),
+                    "_below_ma10": hist_price < current_ma10,
+                    "_stock_id": stock_id,
+                })
             except:
                 continue
 
-        s7 = list(s7_dict.values())
-        # 依跌破幅度排序（跌最多在前）
-        s7.sort(key=lambda x: float(x["跌破幅度"].replace("%", "")))
+        s7.sort(key=lambda x: x["股票代號"])
 
+        # 批次抓即時股價，並重新計算含今日即時價的均線
+        s7_ids = [x["_stock_id"] for x in s7]
+        if s7_ids:
+            rt_prices = get_realtime_prices(s7_ids)
+            for item in s7:
+                sid = item.pop("_stock_id")
+                rt = rt_prices.get(sid, {})
+                rt_price = rt.get("price", None)
+                item["即時股價"] = rt_price if rt_price else item["昨收"]
+
+                if rt_price and sid in close_3m.columns:
+                    try:
+                        hist = close_3m[sid].dropna()
+                        today_ts = pd.Timestamp(datetime.today().date())
+                        if hist.index[-1] < today_ts:
+                            new_row = pd.Series([rt_price], index=[today_ts])
+                            prices_with_today = pd.concat([hist, new_row])
+                        else:
+                            prices_with_today = hist.copy()
+                            prices_with_today.iloc[-1] = rt_price
+                        new_ma10 = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
+                        new_ma20 = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
+                        new_high = round(prices_with_today.max(), 2)
+                        item["10日均線"] = new_ma10
+                        item["20日均線"] = new_ma20
+                        item["2月高點"] = new_high
+                        item["_below_ma10"] = rt_price < new_ma10
+                    except Exception as e:
+                        print(f"策略七重新計算均線失敗 {sid}: {e}")
+
+        print(f"近兩個月處置股: {len(s7)}筆")
     except Exception as e:
-        print(f"處置股API失敗: {e}")
+        print(f"策略七錯誤: {e}")
         s7 = []
 
     # 策略七B：處置第五天（第3~5個交易日）
@@ -842,8 +835,9 @@ def strategy(sid):
             "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
-        7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，最近一次收盤跌破10日均線，跌最多的在前",
-            "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "跌破日期", "收盤價", "10日均線", "跌破幅度"]},
+        7: {"title": "近兩個月處置股", "icon": "⚠️", "desc": "近兩個月曾被處置的股票，顯示即時股價、兩個月高點、10日線、20日線，紅底為跌破10日線",
+            "stocks": s7, "columns": ["股票代號", "股票名稱", "即時股價", "昨收", "2月高點", "10日均線", "20日均線"],
+            "below_ma10_ids": {x["股票代號"] for x in s7 if x.get("_below_ma10")}},
         14: {"title": "處置第五天", "icon": "📅", "desc": "目前正在被處置的股票，今天是處置後第3到第5個交易日",
             "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "處置第幾天", "即時股價", "昨收", "10日高點", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7b if x.get("_below_ma10")}},
