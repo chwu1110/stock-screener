@@ -237,6 +237,8 @@ DETAIL_TEMPLATE = """
         .stock-id { color: #38bdf8; font-weight: bold; }
         .empty { text-align: center; color: #94a3b8; padding: 40px; background: #1e293b; border-radius: 12px; }
         .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 20px; }
+        .below-ma10 td { background: rgba(248, 113, 113, 0.08); }
+        .below-ma10:hover td { background: rgba(248, 113, 113, 0.15) !important; }
     </style>
 </head>
 <body>
@@ -260,12 +262,14 @@ DETAIL_TEMPLATE = """
         </thead>
         <tbody>
             {% for s in stocks %}
-            <tr>
+            <tr {% if below_ma10_ids is defined and s['股票代號'] in below_ma10_ids %}class="below-ma10"{% endif %}>
                 {% for col in columns %}
                 <td class="
                     {% if col == '股票代號' %}stock-id
-                    {% elif '漲幅' in col or '收盤' in col or '漲停' in col %}gain
-                    {% elif '修正' in col or '開盤' in col %}loss
+                    {% elif col == '即時股價' and below_ma10_ids is defined and s['股票代號'] in below_ma10_ids %}loss
+                    {% elif col == '10日均線' and below_ma10_ids is defined and s['股票代號'] in below_ma10_ids %}loss
+                    {% elif '漲幅' in col or '漲停' in col %}gain
+                    {% elif '修正' in col %}loss
                     {% endif %}
                 ">{{ s[col] }}</td>
                 {% endfor %}
@@ -726,6 +730,7 @@ def get_all_data():
                     hist_price = prices.iloc[-1]
                     current_ma10 = ma10.iloc[-1]
                     current_ma20 = ma20.iloc[-1]
+                    high_10d = prices.iloc[-10:].max() if len(prices) >= 10 else prices.max()
 
                     if pd.isna(current_ma10) or pd.isna(current_ma20):
                         continue
@@ -738,8 +743,10 @@ def get_all_data():
                         "處置期間": date_period_ad,
                         "處置第幾天": f"第{today_idx}天",
                         "昨收": round(hist_price, 2),
+                        "10日高點": round(high_10d, 2),
                         "10日均線": round(current_ma10, 2),
                         "20日均線": round(current_ma20, 2),
+                        "_below_ma10": hist_price < current_ma10,
                         "_stock_id": stock_id,
                     })
                 except:
@@ -761,18 +768,20 @@ def get_all_data():
                 if rt_price and sid in close_3m.columns:
                     try:
                         hist = close_3m[sid].dropna()
-                        # 建立包含今日即時價的新序列
                         today_ts = pd.Timestamp(datetime.today().date())
                         if hist.index[-1] < today_ts:
-                            # 今天尚未收盤，把即時價接在最後
                             new_row = pd.Series([rt_price], index=[today_ts])
                             prices_with_today = pd.concat([hist, new_row])
                         else:
-                            # 今天已有收盤，用即時價覆蓋
                             prices_with_today = hist.copy()
                             prices_with_today.iloc[-1] = rt_price
-                        item["10日均線"] = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
-                        item["20日均線"] = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
+                        new_ma10 = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
+                        new_ma20 = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
+                        high_10d = round(prices_with_today.iloc[-10:].max(), 2)
+                        item["10日均線"] = new_ma10
+                        item["20日均線"] = new_ma20
+                        item["10日高點"] = high_10d
+                        item["_below_ma10"] = rt_price < new_ma10
                     except Exception as e:
                         print(f"重新計算均線失敗 {sid}: {e}")
 
@@ -836,13 +845,15 @@ def strategy(sid):
         7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，最近一次收盤跌破10日均線，跌最多的在前",
             "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "跌破日期", "收盤價", "10日均線", "跌破幅度"]},
         14: {"title": "處置第五天", "icon": "📅", "desc": "目前正在被處置的股票，今天是處置後第3到第5個交易日",
-            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "處置第幾天", "即時股價", "昨收", "10日均線", "20日均線"]},
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "處置第幾天", "即時股價", "昨收", "10日高點", "10日均線", "20日均線"],
+            "below_ma10_ids": {x["股票代號"] for x in s7b if x.get("_below_ma10")}},
     }
 
     if sid not in strategies:
         return "找不到此策略", 404
 
     s = strategies[sid]
+    s.setdefault('below_ma10_ids', set())
     return render_template_string(DETAIL_TEMPLATE, update_time=update_time, **s)
 
 # 啟動排程器：每天 14:30 自動更新處置股資料
