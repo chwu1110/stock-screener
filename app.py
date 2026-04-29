@@ -1002,11 +1002,49 @@ def strategy(sid):
     s.setdefault('below_ma10_ids', set())
     return render_template_string(DETAIL_TEMPLATE, update_time=update_time, **s)
 
+TELEGRAM_TOKEN = "8721511256:AAFVhKoVQgfu43288ivwVaLxgoIVNFRtXKs"
+TELEGRAM_CHAT_ID = "7449081850"
+
+def send_telegram(msg):
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "HTML"}, timeout=10)
+    except Exception as e:
+        print(f"Telegram 發送失敗: {e}")
+
+def check_and_notify_s7():
+    """檢查策略7：即時股價 <= 2月高點 * 0.82 就發 Telegram 通知"""
+    try:
+        s7 = get_s7_data()
+        alerts = []
+        for stock in s7:
+            price = stock.get("即時股價", 0)
+            high = stock.get("2月高點", 0)
+            if high > 0 and price > 0 and price <= high * 0.82:
+                drop_pct = (price - high) / high * 100
+                sid = stock["股票代號"]
+                name = stock["股票名稱"]
+                ma10 = stock.get("10日均線", "-")
+                ma20 = stock.get("20日均線", "-")
+                line = f"<b>{sid} {name}</b>\n即時價: {price} | 2月高點: {high} | 跌幅: {drop_pct:.1f}%\n10日線: {ma10} | 20日線: {ma20}"
+                alerts.append(line)
+        if alerts:
+            msg = "\U0001F4C9 <b>處置股跌破高點82%警示</b>\n\n" + "\n\n".join(alerts)
+
+            send_telegram(msg)
+            print(f"[Telegram] 發送 {len(alerts)} 筆警示")
+        else:
+            print("[Telegram] 無符合條件的股票")
+    except Exception as e:
+        print(f"check_and_notify_s7 錯誤: {e}")
+
 # 啟動排程器：每天 14:30 自動更新處置股資料
 scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 scheduler.add_job(update_disposal_history, "cron", hour=14, minute=30)
 scheduler.add_job(refresh_disposal_from_github, "cron", hour=14, minute=35)  # 本機push後Railway自動同步
 scheduler.add_job(lambda: (_cache.update({"data": None, "time": None}), _s7_cache.update({"data": None, "time": None})), "cron", hour=15, minute=0)
+scheduler.add_job(check_and_notify_s7, "cron", hour=10, minute=0)   # 早上10點檢查
+scheduler.add_job(check_and_notify_s7, "cron", hour=13, minute=0)   # 下午1點檢查
 scheduler.start()
 
 # 啟動時立刻從 GitHub 載入最新處置股資料
