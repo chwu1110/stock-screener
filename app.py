@@ -673,6 +673,13 @@ _global_s5 = []
 _global_s6 = []
 _global_s7 = []
 
+def get_cached_data():
+    now = datetime.now()
+    if _cache["data"] is None or (now - _cache["time"]).seconds > 1800:
+        _cache["data"] = get_all_data()
+        _cache["time"] = now
+    return _cache["data"]
+
 @app.route("/")
 def home():
     s1, s2, s3, s4, s5, s6, s7, s7b = get_cached_data()
