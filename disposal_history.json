@@ -5203,13 +5203,13 @@
     "7751": {
       "name": "竑騰",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "7734": {
       "name": "印能科技",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "3228": {
@@ -5227,7 +5227,7 @@
     "3581": {
       "name": "博磊",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "3631": {
@@ -5239,13 +5239,13 @@
     "4971": {
       "name": "IET-KY",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "6217": {
       "name": "中探針",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "6735": {
@@ -5257,13 +5257,13 @@
     "80212": {
       "name": "尖點二",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "3363": {
       "name": "上詮",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "4768": {
@@ -5317,7 +5317,7 @@
     "3339": {
       "name": "泰谷",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "33881": {
@@ -5335,19 +5335,19 @@
     "49793": {
       "name": "華星光三",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "49794": {
       "name": "華星光四",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "6829": {
       "name": "千附精密",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "3388": {
@@ -5407,25 +5407,25 @@
     "3555": {
       "name": "博士旺",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "4908": {
       "name": "前鼎",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "4979": {
       "name": "華星光",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "5340": {
       "name": "建榮",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "6173": {
@@ -5479,7 +5479,7 @@
     "64512": {
       "name": "訊芯二KY",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "8043": {
@@ -5491,7 +5491,7 @@
     "31672": {
       "name": "大量二",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "3289": {
@@ -5563,19 +5563,19 @@
     "24672": {
       "name": "志聖二",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "24673": {
       "name": "志聖三",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "24866": {
       "name": "一詮六",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "3234": {
@@ -5593,7 +5593,7 @@
     "4991": {
       "name": "環宇-KY",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "6147": {
@@ -5605,7 +5605,7 @@
     "68301": {
       "name": "汎銓一",
       "period": "",
-      "is_20min": false,
+      "is_20min": true,
       "market": "上櫃"
     },
     "6903": {
