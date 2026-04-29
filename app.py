@@ -198,7 +198,7 @@ HOME_TEMPLATE = """
         </a>
         <a href="/strategy/14" class="card">
             <div class="card-icon">📅</div>
-            <div class="card-title">處置第五天</div>
+            <div class="card-title">處置股</div>
             <div class="card-desc">目前正在被處置的股票，今天是處置後第3到第5個交易日</div>
             <div class="card-count">{{ counts[6] }}</div>
             <div class="card-count-label">符合股票數</div>
@@ -631,6 +631,8 @@ def get_all_data():
                         print(f"  {stock_id} 日期格式錯誤: {date_period}")
                         continue
                     start_date = roc_to_date2(parts[0])
+                    end_date_ts = roc_to_date2(parts[1])
+                    end_date_str = end_date_ts.strftime("%Y/%m/%d")
 
                     if stock_id not in close_3m.columns:
                         continue
@@ -670,24 +672,27 @@ def get_all_data():
                         "股票代號": stock_id,
                         "股票名稱": stock_name,
                         "處置期間": date_period_ad,
+                        "出關日": end_date_str,
                         "處置第幾天": f"第{today_idx}天",
                         "昨收": round(hist_price, 2),
                         "20日高點": round(high_10d, 2),
                         "10日均線": round(current_ma10, 2),
                         "20日均線": round(current_ma20, 2),
                         "_below_ma10": hist_price < current_ma10,
+                        "_end_date": end_date_ts,
                         "_stock_id": stock_id,
                     })
                 except:
                     continue
 
-        s7b.sort(key=lambda x: x["處置第幾天"])
+        s7b.sort(key=lambda x: x["_end_date"])
 
         # 批次抓即時股價，並重新計算含今日即時價的均線
         s7b_ids = [x["_stock_id"] for x in s7b]
         if s7b_ids:
             rt_prices = get_realtime_prices(s7b_ids)
             for item in s7b:
+                item.pop("_end_date", None)
                 sid = item.pop("_stock_id")
                 rt = rt_prices.get(sid, {})
                 rt_price = rt.get("price", None)
@@ -890,8 +895,8 @@ def strategy(sid):
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: None,  # 懶載入，下方單獨處理
-        14: {"title": "處置第五天", "icon": "📅", "desc": "目前正在被處置的股票，今天是處置後第3到第5個交易日",
-            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "處置第幾天", "即時股價", "昨收", "20日高點", "10日均線", "20日均線"],
+        14: {"title": "處置股", "icon": "📅", "desc": "目前正在被處置的股票（第3~5個交易日），最快出關的在前",
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "20日高點", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7b if x.get("_below_ma10")}},
     }
 
