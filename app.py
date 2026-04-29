@@ -603,116 +603,99 @@ def get_all_data():
     # 策略七：懶載入，點進頁面才計算（避免啟動 timeout）
     s7 = []
 
-    # 策略七B：處置股（上市＋上櫃）
+    # 策略七B：處置股 — 使用 _disposal_history 今日資料（最完整）
     s7b = []
     try:
-        def roc_to_date2(s):
-            y, m, d = s.strip().split("/")
-            return pd.Timestamp(int(y)+1911, int(m), int(d))
-
         import re
-        def roc_to_ad(m):
-            return str(int(m.group(1)) + 1911) + "/" + m.group(2)
 
-        # 抓上市
-        disposal_rows = []
-        try:
-            res_twse = requests.get("https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
-                                    headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-            d_twse = res_twse.json()
-            if d_twse.get("stat") == "OK":
-                disposal_rows += d_twse.get("data", [])
-                print(f"處置股上市：{len(d_twse.get('data',[]))}筆")
-        except Exception as e:
-            print(f"處置股上市抓取失敗: {e}")
+        # 取今天或最近一天的處置股資料（已包含上市+上櫃）
+        today_str = date.today().strftime("%Y-%m-%d")
+        disposal_today = _disposal_history.get(today_str, {})
+        if not disposal_today:
+            # 找最近一天
+            for d_str in sorted(_disposal_history.keys(), reverse=True):
+                disposal_today = _disposal_history[d_str]
+                if disposal_today:
+                    print(f"處置股使用 {d_str} 的資料（共{len(disposal_today)}檔）")
+                    break
 
-        # 抓上櫃
-        try:
-            res_otc = requests.get("https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
-                                   headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-            d_otc = res_otc.json()
-            otc_rows = d_otc.get("aaData", d_otc.get("data", []))
-            disposal_rows += otc_rows
-            print(f"處置股上櫃：{len(otc_rows)}筆")
-        except Exception as e:
-            print(f"處置股上櫃抓取失敗: {e}")
+        print(f"處置股資料來源：共{len(disposal_today)}檔")
 
-        rows = disposal_rows
-        print(f"處置股合計：{len(rows)}筆")
-        if rows:
-            for row in rows:
-                try:
-                    stock_id   = str(row[2]).strip()
-                    stock_name = str(row[3]).strip()
-                    date_period = str(row[6]).strip() if len(row) > 6 else ""
-                    parts = date_period.replace(" ", "").replace("～", "~").split("~")
-                    if len(parts) != 2:
-                        print(f"  {stock_id} 日期格式錯誤: {date_period}")
-                        continue
-                    # 自動判斷民國年(3位數)或西元年(4位數)
-                    def parse_date(s):
-                        s = s.strip()
-                        y, m, d = s.split("/")
-                        if len(y) == 3:  # 民國年
-                            return pd.Timestamp(int(y)+1911, int(m), int(d))
-                        else:  # 西元年
-                            return pd.Timestamp(int(y), int(m), int(d))
-                    start_date = parse_date(parts[0])
-                    end_date_ts = parse_date(parts[1])
-                    end_date_str = end_date_ts.strftime("%Y/%m/%d")
+        def parse_period(period_str):
+            """解析處置期間，支援民國年和西元年，回傳 (start_ts, end_ts, period_ad)"""
+            period_str = period_str.replace(" ", "").replace("～", "~").replace("~", "~")
+            parts = period_str.split("~")
+            if len(parts) != 2:
+                return None, None, period_str
+            def to_ts(s):
+                s = s.strip()
+                y, m, d = s.split("/")
+                if len(y) == 3:
+                    return pd.Timestamp(int(y)+1911, int(m), int(d))
+                return pd.Timestamp(int(y), int(m), int(d))
+            try:
+                start_ts = to_ts(parts[0])
+                end_ts   = to_ts(parts[1])
+                # 轉西元顯示
+                period_ad = re.sub(r'(\d{3})/(\d{2}/\d{2})', lambda m: str(int(m.group(1))+1911)+"/"+m.group(2), period_str)
+                return start_ts, end_ts, period_ad
+            except:
+                return None, None, period_str
 
-                    if stock_id not in close_3m.columns:
-                        continue
-                    prices = close_3m[stock_id].dropna()
-                    if len(prices) < 20:
-                        continue
-
-                    trading_days = prices.index[prices.index >= start_date]
-                    if len(trading_days) < 3:
-                        continue
-
-                    # 用最近的交易日判斷是第幾天（FinLab資料到昨天）
-                    today_ts = pd.Timestamp(today)
-                    today_idx = len(trading_days)  # 到今天為止共幾個交易日
-                    # 如果最後一個交易日是今天或之前，就是該天數
-                    # 實際上因為FinLab資料只到昨天，today_idx = 昨天是第幾天+1
-                    today_idx = len(trading_days) + 1 if trading_days[-1] < today_ts else len(trading_days)
-
-                    print(f"  {stock_id} 開始:{str(start_date)[:10]} 交易天數:{len(trading_days)} 估計今天第{today_idx}天")
-
-
-                    ma10 = prices.rolling(10).mean()
-                    ma20 = prices.rolling(20).mean()
-                    hist_price = prices.iloc[-1]
-                    current_ma10 = ma10.iloc[-1]
-                    current_ma20 = ma20.iloc[-1]
-                    if stock_id in high_3m.columns:
-                        h = high_3m[stock_id].dropna()
-                        high_10d = h.iloc[-20:].max() if len(h) >= 20 else h.max()
-                    else:
-                        high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
-
-                    if pd.isna(current_ma10) or pd.isna(current_ma20):
-                        continue
-
-                    date_period_ad = re.sub(r'(\d{3})/(\d{2}/\d{2})', roc_to_ad, date_period)
-
-                    s7b.append({
-                        "股票代號": stock_id,
-                        "股票名稱": stock_name,
-                        "處置期間": date_period_ad,
-                        "出關日": end_date_str,
-                        "處置第幾天": f"第{today_idx}天",
-                        "昨收": round(hist_price, 2),
-                        "20日高點": round(high_10d, 2),
-                        "10日均線": round(current_ma10, 2),
-                        "20日均線": round(current_ma20, 2),
-                        "_below_ma10": hist_price < current_ma10,
-                        "_end_date": end_date_ts,
-                        "_stock_id": stock_id,
-                    })
-                except:
+        for stock_id, info in disposal_today.items():
+            try:
+                stock_name  = info.get("name", "")
+                period_raw  = info.get("period", "")
+                start_date, end_date_ts, date_period_ad = parse_period(period_raw)
+                if start_date is None or end_date_ts is None:
+                    print(f"  {stock_id} 日期格式錯誤: {period_raw}")
                     continue
+                end_date_str = end_date_ts.strftime("%Y/%m/%d")
+
+                if stock_id not in close_3m.columns:
+                    print(f"  跳過 {stock_id}：不在 close_3m")
+                    continue
+                prices = close_3m[stock_id].dropna()
+                if len(prices) < 20:
+                    print(f"  跳過 {stock_id}：資料不足20筆({len(prices)}筆)")
+                    continue
+
+                trading_days = prices.index[prices.index >= start_date]
+                today_ts = pd.Timestamp(today)
+                today_idx = len(trading_days) + 1 if len(trading_days) > 0 and trading_days[-1] < today_ts else len(trading_days)
+
+                print(f"  {stock_id} 開始:{str(start_date)[:10]} 交易天數:{len(trading_days)} 估計今天第{today_idx}天")
+
+                ma10 = prices.rolling(10).mean()
+                ma20 = prices.rolling(20).mean()
+                hist_price = prices.iloc[-1]
+                current_ma10 = ma10.iloc[-1]
+                current_ma20 = ma20.iloc[-1]
+                if stock_id in high_3m.columns:
+                    h = high_3m[stock_id].dropna()
+                    high_10d = h.iloc[-20:].max() if len(h) >= 20 else h.max()
+                else:
+                    high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
+
+                if pd.isna(current_ma10) or pd.isna(current_ma20):
+                    continue
+
+                s7b.append({
+                    "股票代號": stock_id,
+                    "股票名稱": stock_name,
+                    "處置期間": date_period_ad,
+                    "出關日": end_date_str,
+                    "處置第幾天": f"第{today_idx}天",
+                    "昨收": round(hist_price, 2),
+                    "20日高點": round(high_10d, 2),
+                    "10日均線": round(current_ma10, 2),
+                    "20日均線": round(current_ma20, 2),
+                    "_below_ma10": hist_price < current_ma10,
+                    "_end_date": end_date_ts,
+                    "_stock_id": stock_id,
+                })
+            except:
+                continue
 
         s7b.sort(key=lambda x: x["_end_date"])
 
