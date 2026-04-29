@@ -123,8 +123,6 @@ def _fetch_disposal_otc():
 
 def refresh_disposal_from_github():
     """每天從 GitHub 重新載入最新的處置股歷史"""
-def refresh_disposal_from_github():
-    """每天從 GitHub 重新載入最新的處置股歷史"""
     global _disposal_history
     try:
         github_url = "https://raw.githubusercontent.com/chwu1110/stock-screener/main/disposal_history.json"
@@ -997,8 +995,12 @@ def strategy(sid):
 # 啟動排程器：每天 14:30 自動更新處置股資料
 scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 scheduler.add_job(update_disposal_history, "cron", hour=14, minute=30)
+scheduler.add_job(refresh_disposal_from_github, "cron", hour=14, minute=35)  # 本機push後Railway自動同步
 scheduler.add_job(lambda: (_cache.update({"data": None, "time": None}), _s7_cache.update({"data": None, "time": None})), "cron", hour=15, minute=0)
 scheduler.start()
+
+# 啟動時立刻從 GitHub 載入最新處置股資料
+refresh_disposal_from_github()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
