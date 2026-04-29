@@ -659,7 +659,11 @@ def get_all_data():
                     hist_price = prices.iloc[-1]
                     current_ma10 = ma10.iloc[-1]
                     current_ma20 = ma20.iloc[-1]
-                    high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
+                    if stock_id in high_3m.columns:
+                        h = high_3m[stock_id].dropna()
+                        high_10d = h.iloc[-20:].max() if len(h) >= 20 else h.max()
+                    else:
+                        high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
 
                     if pd.isna(current_ma10) or pd.isna(current_ma20):
                         continue
@@ -709,7 +713,12 @@ def get_all_data():
                             prices_with_today.iloc[-1] = rt_price
                         new_ma10 = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
                         new_ma20 = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
-                        high_10d = round(prices_with_today.iloc[-20:].max(), 2)
+                        if sid in high_3m.columns:
+                            h = high_3m[sid].dropna()
+                            hist_high = h.iloc[-20:].max() if len(h) >= 20 else h.max()
+                        else:
+                            hist_high = prices_with_today.iloc[-20:].max()
+                        high_10d = round(max(hist_high, rt_price), 2)
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
                         item["20日高點"] = high_10d
