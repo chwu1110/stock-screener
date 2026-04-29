@@ -704,7 +704,7 @@ def get_all_data():
                     continue
                 end_date_str = end_date_ts.strftime("%Y/%m/%d")
 
-                # 過濾已出關的股票
+                # 過濾已出關的股票（出關日早於今天才過濾）
                 if end_date_ts < pd.Timestamp(today.date()):
                     continue
 
