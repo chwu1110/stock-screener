@@ -203,6 +203,13 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[6] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
+        <a href="/strategy/14" class="card">
+            <div class="card-icon">📅</div>
+            <div class="card-title">處置第五天</div>
+            <div class="card-desc">目前正在被處置的股票，今天剛好是處置後第5個交易日</div>
+            <div class="card-count">{{ counts[13] }}</div>
+            <div class="card-count-label">符合股票數</div>
+        </a>
         <a href="/strategy/12" class="card">
             <div class="card-icon">📊</div>
             <div class="card-title">處置股來到月線</div>
@@ -837,6 +844,80 @@ def get_all_data():
         print(f"處置股API失敗: {e}")
         s7 = []
 
+    # 策略七B：處置第五天
+    s7b = []
+    try:
+        disposal_url2 = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
+        disposal_res2 = requests.get(disposal_url2, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
+        disposal_data2 = disposal_res2.json()
+
+        def roc_to_date2(s):
+            y, m, d = s.strip().split("/")
+            return pd.Timestamp(int(y)+1911, int(m), int(d))
+
+        if disposal_data2.get("stat") == "OK":
+            for row in disposal_data2.get("data", []):
+                try:
+                    stock_id   = row[2].strip()
+                    stock_name = row[3].strip()
+                    date_period = row[6].strip() if len(row) > 6 else ""
+                    parts = date_period.replace(" ", "").split("~")
+                    if len(parts) != 2:
+                        continue
+                    start_date = roc_to_date2(parts[0])
+
+                    if stock_id not in close_3m.columns:
+                        continue
+                    prices = close_3m[stock_id].dropna()
+                    if len(prices) < 20:
+                        continue
+
+                    # 找處置開始後的交易日序列
+                    trading_days = prices.index[prices.index >= start_date]
+                    if len(trading_days) < 5:
+                        continue
+
+                    # 第5個交易日
+                    day5 = trading_days[4]
+
+                    # 判斷今天是否是第5天（允許±1天誤差）
+                    today_ts = pd.Timestamp(today)
+                    if abs((day5 - today_ts).days) > 1:
+                        continue
+
+                    # 計算10日和20日均線
+                    ma10 = prices.rolling(10).mean()
+                    ma20 = prices.rolling(20).mean()
+                    current_price = prices.iloc[-1]
+                    current_ma10 = ma10.iloc[-1]
+                    current_ma20 = ma20.iloc[-1]
+
+                    if pd.isna(current_ma10) or pd.isna(current_ma20):
+                        continue
+
+                    # 轉換處置期間為西元年
+                    import re
+                    def roc_to_ad(m):
+                        return str(int(m.group(1)) + 1911) + "/" + m.group(2)
+                    date_period_ad = re.sub(r'(\d{3})/(\d{2}/\d{2})', roc_to_ad, date_period)
+
+                    s7b.append({
+                        "股票代號": stock_id,
+                        "股票名稱": stock_name,
+                        "處置期間": date_period_ad,
+                        "第五天日期": str(day5)[:10],
+                        "目前股價": round(current_price, 2),
+                        "10日均線": round(current_ma10, 2),
+                        "20日均線": round(current_ma20, 2),
+                    })
+                except:
+                    continue
+
+        s7b.sort(key=lambda x: x["股票代號"])
+        print(f"處置第五天: {len(s7b)}筆")
+    except Exception as e:
+        print(f"處置第五天錯誤: {e}")
+        s7b = []
 
     # 策略八：興櫃爆量強漲（用公開API抓今日資料）
     s8 = []
@@ -1090,7 +1171,7 @@ def get_all_data():
     _global_s10 = s10
     _global_s12 = s12
 
-    return s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12
+    return s1, s2, s3, s4, s5, s6, s7, s7b, s8, s9, s10, s11, s12
 
 
 
@@ -1368,13 +1449,13 @@ def monitor():
 
 @app.route("/")
 def home():
-    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s7b, s8, s9, s10, s11, s12 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9), len(s10), len(s11), len(s12)], update_time=update_time)
+    return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), len(s8), len(s9), len(s10), len(s11), len(s12), len(s7b)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
-    s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12 = get_cached_data()
+    s1, s2, s3, s4, s5, s6, s7, s7b, s8, s9, s10, s11, s12 = get_cached_data()
     update_time = _cache["time"].strftime("%Y-%m-%d %H:%M") if _cache["time"] else datetime.now().strftime("%Y-%m-%d %H:%M")
 
     strategies = {
@@ -1400,6 +1481,8 @@ def strategy(sid):
             "stocks": s11, "columns": ["股票代號", "股票名稱", "今日收盤", "今日漲幅", "前兩天最高", "30日高點", "30日低點", "平台區間"]},
         12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下3%以內，偏離最小的在前",
             "stocks": s12, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "20日均線", "偏離幅度"]},
+        14: {"title": "處置第五天", "icon": "📅", "desc": "目前正在被處置的股票，今天剛好是處置後第5個交易日",
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "第五天日期", "目前股價", "10日均線", "20日均線"]},
     }
 
     if sid not in strategies:
