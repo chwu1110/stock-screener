@@ -550,36 +550,17 @@ def get_all_data():
     data.date_range = (start_3m, end_date)
     close = data.get("price:收盤價")
     open_ = data.get("price:開盤價")
-    stock_info = data.get("company_basic_info")
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
-    # 市場別：上市/上櫃
-    market_col = None
-    for col in ["市場別", "market_type", "exchange", "上市櫃"]:
-        if col in stock_info.columns:
-            market_col = col
-            break
-    if market_col:
-        market_dict = stock_info.set_index("stock_id")[market_col].to_dict()
-    else:
-        market_dict = {}
 
     global _global_industry_dict
     _global_industry_dict = industry_dict
 
-    # 高低價只抓1個月（只用於星星標記）
-    data.date_range = (start_1m, end_date)
-    high_ = data.get("price:最高價")
-    low_  = data.get("price:最低價")
-    data.date_range = (start_3m, end_date)  # 還原
-
     close_df = pd.DataFrame(close.values, index=pd.to_datetime(close.index.astype(str)), columns=close.columns)
     open_df = pd.DataFrame(open_.values, index=pd.to_datetime(open_.index.astype(str)), columns=open_.columns)
-    high_df = pd.DataFrame(high_.values, index=pd.to_datetime(high_.index.astype(str)), columns=high_.columns)
-    low_df  = pd.DataFrame(low_.values,  index=pd.to_datetime(low_.index.astype(str)),  columns=low_.columns)
 
     # 釋放原始資料節省記憶體
-    del close, open_, high_, low_, stock_info
+    del close, open_, stock_info
 
     close_3m = close_df[close_df.index >= pd.to_datetime(start_3m)]
 
@@ -590,11 +571,9 @@ def get_all_data():
     close_1m = close_df[close_df.index >= pd.to_datetime(start_1m)]
     close_2026 = close_df[close_df.index >= pd.to_datetime(start_2026)]
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
-    high_1m = high_df
-    low_1m  = low_df
 
     # 釋放大型 DataFrame 節省記憶體
-    del close_df, open_df, high_df, low_df, close_3m
+    del close_df, open_df, close_3m
 
     def is_strong_day(stock, date, df_close, df_high, df_low, df_open=None):
         """判斷是否為強勢漲停日：一價到底(高低差≤2%) 或 開盤即漲停"""
@@ -625,13 +604,11 @@ def get_all_data():
         for date in dates:
             prev_idx = is_limit_up.index.get_loc(date) - 1
             prev_date = is_limit_up.index[prev_idx]
-            star1 = "⭐" if is_strong_day(stock, prev_date, close_1m, high_1m, low_1m, open_df) else ""
-            star2 = "⭐" if is_strong_day(stock, date, close_1m, high_1m, low_1m, open_df) else ""
             s1.append({
                 "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
                 "第一天漲停日": str(prev_date)[:10], "第二天漲停日": str(date)[:10],
-                "第一天收盤": f"{star1}{round(close_1m[stock].loc[prev_date], 2)}",
-                "第二天收盤": f"{star2}{round(close_1m[stock].loc[date], 2)}",
+                "第一天收盤": round(close_1m[stock].loc[prev_date], 2),
+                "第二天收盤": round(close_1m[stock].loc[date], 2),
             })
     s1.sort(key=lambda x: x["第二天漲停日"], reverse=True)
 
@@ -707,16 +684,13 @@ def get_all_data():
             gain = rolling_3.loc[date]
             cond = "連續三天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3]) else "三天漲幅≥30%"
             if stock not in s4_dict or gain > float(s4_dict[stock]["三日累積漲幅"].replace("%","")):
-                star1 = "⭐" if is_strong_day(stock, d1, close_1m, high_1m, low_1m, open_df) else ""
-                star2 = "⭐" if is_strong_day(stock, d2, close_1m, high_1m, low_1m, open_df) else ""
-                star3 = "⭐" if is_strong_day(stock, d3, close_1m, high_1m, low_1m, open_df) else ""
                 s4_dict[stock] = {
                     "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
                     "觸發條件": cond,
                     "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10],
-                    "第一天收盤": f"{star1}{round(close_1m[stock].loc[d1], 2)}",
-                    "第二天收盤": f"{star2}{round(close_1m[stock].loc[d2], 2)}",
-                    "第三天收盤": f"{star3}{round(close_1m[stock].loc[d3], 2)}",
+                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                    "第二天收盤": round(close_1m[stock].loc[d2], 2),
+                    "第三天收盤": round(close_1m[stock].loc[d3], 2),
                     "三日累積漲幅": f"{gain*100:.1f}%",
                 }
 
@@ -740,14 +714,12 @@ def get_all_data():
             gain = rolling_4.loc[date]
             cond = "連續四天漲停" if (is_lu.loc[d1] and is_lu.loc[d2] and is_lu.loc[d3] and is_lu.loc[d4]) else "四天漲幅≥40%"
             if stock not in s5_dict or gain > float(s5_dict[stock]["四日累積漲幅"].replace("%","")):
-                star1 = "⭐" if is_strong_day(stock, d1, close_1m, high_1m, low_1m, open_df) else ""
-                star4 = "⭐" if is_strong_day(stock, d4, close_1m, high_1m, low_1m, open_df) else ""
                 s5_dict[stock] = {
                     "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
                     "觸發條件": cond,
                     "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10], "第四天": str(d4)[:10],
-                    "第一天收盤": f"{star1}{round(close_1m[stock].loc[d1], 2)}",
-                    "第四天收盤": f"{star4}{round(close_1m[stock].loc[d4], 2)}",
+                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                    "第四天收盤": round(close_1m[stock].loc[d4], 2),
                     "四日累積漲幅": f"{gain*100:.1f}%",
                 }
 
@@ -773,13 +745,11 @@ def get_all_data():
             if stock not in s6_dict or gain > float(s6_dict[stock]["五日累積漲幅"].replace("%","")):
                 d1 = series.index[idx-4]
                 d5 = series.index[idx]
-                star1 = "⭐" if is_strong_day(stock, d1, close_1m, high_1m, low_1m, open_df) else ""
-                star5 = "⭐" if is_strong_day(stock, d5, close_1m, high_1m, low_1m, open_df) else ""
                 s6_dict[stock] = {
                     "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
                     "第一天": str(d1)[:10], "第五天": str(d5)[:10],
-                    "第一天收盤": f"{star1}{round(close_1m[stock].loc[d1], 2)}",
-                    "第五天收盤": f"{star5}{round(close_1m[stock].loc[d5], 2)}",
+                    "第一天收盤": round(close_1m[stock].loc[d1], 2),
+                    "第五天收盤": round(close_1m[stock].loc[d5], 2),
                     "五日累積漲幅": f"{gain*100:.1f}%",
                 }
 
