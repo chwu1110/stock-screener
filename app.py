@@ -653,8 +653,6 @@ def get_all_data():
 
                     print(f"  {stock_id} 開始:{str(start_date)[:10]} 交易天數:{len(trading_days)} 估計今天第{today_idx}天")
 
-                    if today_idx is None or today_idx < 3 or today_idx > 5:
-                        continue
 
                     ma10 = prices.rolling(10).mean()
                     ma20 = prices.rolling(20).mean()
@@ -895,7 +893,7 @@ def strategy(sid):
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: None,  # 懶載入，下方單獨處理
-        14: {"title": "處置股", "icon": "📅", "desc": "目前正在被處置的股票（第3~5個交易日），最快出關的在前",
+        14: {"title": "處置股", "icon": "📅", "desc": "目前正在被處置的股票，最快出關的在前",
             "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "20日高點", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7b if x.get("_below_ma10")}},
     }
