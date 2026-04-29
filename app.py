@@ -203,13 +203,6 @@ HOME_TEMPLATE = """
             <div class="card-count">{{ counts[6] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
-        <a href="/strategy/10" class="card">
-            <div class="card-icon">🔻</div>
-            <div class="card-title">處置股拉回</div>
-            <div class="card-desc">兩個月內曾被處置的股票，連續下跌5天</div>
-            <div class="card-count">{{ counts[9] }}</div>
-            <div class="card-count-label">符合股票數</div>
-        </a>
         <a href="/strategy/12" class="card">
             <div class="card-icon">📊</div>
             <div class="card-title">處置股來到月線</div>
@@ -788,7 +781,8 @@ def get_all_data():
             y, m, d = s.split("/")
             return pd.Timestamp(int(y)+1911, int(m), int(d))
 
-        # 每次跌破都列一筆
+        # 每支股票只留最近一次跌破
+        s7_dict = {}
         for stock_id, info in disposal_stocks.items():
             try:
                 if stock_id not in close_3m.columns:
@@ -811,18 +805,17 @@ def get_all_data():
                 except:
                     pass
 
-                # 找處置期間內每一天跌破10日線的紀錄
-                for date, price in prices.items():
+                # 找處置期間內最近一次跌破10日線
+                for date, price in reversed(list(prices.items())):
                     ma = ma10.get(date)
                     if pd.isna(ma):
                         continue
-                    # 只看處置期間內
                     if disposal_start and disposal_end:
                         if not (disposal_start <= date <= disposal_end):
                             continue
                     if price < ma:
                         diff_pct = (price - ma) / ma
-                        s7.append({
+                        s7_dict[stock_id] = {
                             "股票代號": stock_id,
                             "股票名稱": info["name"],
                             "處置期間": period,
@@ -830,12 +823,14 @@ def get_all_data():
                             "收盤價": round(price, 2),
                             "10日均線": round(ma, 2),
                             "跌破幅度": f"{diff_pct*100:.1f}%",
-                        })
+                        }
+                        break
             except:
                 continue
 
-        # 依股票代號、日期排序
-        s7.sort(key=lambda x: (x["股票代號"], x["跌破日期"]))
+        s7 = list(s7_dict.values())
+        # 依跌破幅度排序（跌最多在前）
+        s7.sort(key=lambda x: float(x["跌破幅度"].replace("%", "")))
 
     except Exception as e:
         print(f"處置股API失敗: {e}")
@@ -944,54 +939,7 @@ def get_all_data():
         s9 = []
 
 
-    # 策略十：處置股拉回（兩個月內被處置，且連續下跌5天）
-    s10 = []
-    try:
-        disposal_stocks = disposal_stocks_2m  # 使用歷史處置股資料
-
-        # 計算連續下跌天數
-        two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
-        close_2m = close_df[close_df.index >= pd.to_datetime(two_months_ago)]
-
-        for stock_id, info in disposal_stocks.items():
-            try:
-                if stock_id not in close_2m.columns:
-                    continue
-                prices = close_2m[stock_id].dropna()
-                if len(prices) < 6:
-                    continue
-
-                # 計算每日漲跌
-                daily_chg = prices.diff()
-
-                # 檢查最近5天是否連續下跌
-                last5 = daily_chg.iloc[-5:]
-                if len(last5) < 5:
-                    continue
-
-                if all(last5 < 0):
-                    # 連續下跌5天
-                    current_price = prices.iloc[-1]
-                    price_5d_ago  = prices.iloc[-6]
-                    drop_pct      = (current_price - price_5d_ago) / price_5d_ago
-
-                    s10.append({
-                        "股票代號": stock_id,
-                        "股票名稱": info["name"],
-                        "處置期間": info["period"],
-                        "目前股價": round(current_price, 2),
-                        "5日前股價": round(price_5d_ago, 2),
-                        "5日跌幅": f"{drop_pct*100:.1f}%",
-                        "最近下跌日": str(prices.index[-1])[:10],
-                    })
-            except:
-                continue
-
-        s10.sort(key=lambda x: float(x["5日跌幅"].replace("%", "")))
-
-    except Exception as e:
-        print(f"處置股拉回錯誤: {e}")
-        s10 = []
+    s10 = []  # 策略十已移除
 
 
     # 策略十一：興櫃突破平台
@@ -1447,8 +1395,6 @@ def strategy(sid):
             "stocks": s8, "columns": ["股票代號", "股票名稱", "收盤價", "前日均價", "漲幅", "成交張數", "5日均量(張)", "爆量倍數"]},
         9: {"title": "興櫃當天拉回", "icon": "📉", "desc": "興櫃股票當天從最高點拉回幅度≥25%，拉回最多的在前",
             "stocks": s9, "columns": ["股票代號", "股票名稱", "今日最高", "現價", "前日均價", "拉回幅度", "漲跌幅"]},
-        10: {"title": "處置股拉回", "icon": "🔻", "desc": "兩個月內曾被處置的股票，連續下跌5天，跌最多的在前",
-            "stocks": s10, "columns": ["股票代號", "股票名稱", "處置期間", "目前股價", "5日前股價", "5日跌幅", "最近下跌日"]},
         11: {"title": "興櫃突破平台", "icon": "🚀", "desc": "今天漲幅≥10%、突破前兩天高點、前30天盤整區間≤5%，依漲幅排序",
             "stocks": s11, "columns": ["股票代號", "股票名稱", "今日收盤", "今日漲幅", "前兩天最高", "30日高點", "30日低點", "平台區間"]},
         12: {"title": "處置股來到月線", "icon": "📊", "desc": "兩個月內曾被處置的股票，股價在20日均線上下3%以內，偏離最小的在前",
