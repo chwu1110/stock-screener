@@ -329,6 +329,33 @@ def get_tpex_realtime(stock_ids):
 
 FUGLE_API_KEY = os.environ.get("FUGLE_API_KEY", "")
 
+_realtime_cache = {"prices": {}, "time": None}
+
+def get_realtime_prices(stock_ids):
+    """用 Fugle API 抓即時股價（5分鐘快取）"""
+    now = datetime.now().replace(tzinfo=None)
+    if _realtime_cache["time"] and (now - _realtime_cache["time"]).seconds < 300:
+        return _realtime_cache["prices"]
+
+    prices = {}
+    headers = {"X-API-KEY": FUGLE_API_KEY}
+    for sid in stock_ids:
+        try:
+            url = f"https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/{sid}"
+            resp = requests.get(url, headers=headers, timeout=5, verify=False)
+            if resp.status_code == 200:
+                d = resp.json()
+                price = d.get("closePrice") or d.get("lastPrice") or d.get("referencePrice")
+                t = d.get("lastUpdated", "")
+                if price:
+                    prices[sid] = {"price": float(price), "time": str(t)[:16]}
+        except:
+            continue
+
+    _realtime_cache["prices"] = prices
+    _realtime_cache["time"] = now
+    return prices
+
 def get_all_data():
     finlab.login(api_token=FINLAB_API_KEY)
 
@@ -696,7 +723,7 @@ def get_all_data():
 
                     ma10 = prices.rolling(10).mean()
                     ma20 = prices.rolling(20).mean()
-                    current_price = prices.iloc[-1]
+                    hist_price = prices.iloc[-1]
                     current_ma10 = ma10.iloc[-1]
                     current_ma20 = ma20.iloc[-1]
 
@@ -710,14 +737,25 @@ def get_all_data():
                         "股票名稱": stock_name,
                         "處置期間": date_period_ad,
                         "處置第幾天": f"第{today_idx}天",
-                        "目前股價": round(current_price, 2),
+                        "昨收": round(hist_price, 2),
                         "10日均線": round(current_ma10, 2),
                         "20日均線": round(current_ma20, 2),
+                        "_stock_id": stock_id,
                     })
                 except:
                     continue
 
         s7b.sort(key=lambda x: x["處置第幾天"])
+
+        # 批次抓即時股價
+        s7b_ids = [x["_stock_id"] for x in s7b]
+        if s7b_ids:
+            rt_prices = get_realtime_prices(s7b_ids)
+            for item in s7b:
+                sid = item.pop("_stock_id")
+                rt = rt_prices.get(sid, {})
+                item["即時股價"] = rt.get("price", item["昨收"])
+
         print(f"處置第五天: {len(s7b)}筆")
     except Exception as e:
         print(f"處置第五天錯誤: {e}")
@@ -778,7 +816,7 @@ def strategy(sid):
         7: {"title": "處置股跌破10日線", "icon": "⚠️", "desc": "目前正在被處置的股票，最近一次收盤跌破10日均線，跌最多的在前",
             "stocks": s7, "columns": ["股票代號", "股票名稱", "處置期間", "跌破日期", "收盤價", "10日均線", "跌破幅度"]},
         14: {"title": "處置第五天", "icon": "📅", "desc": "目前正在被處置的股票，今天是處置後第3到第5個交易日",
-            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "處置第幾天", "目前股價", "10日均線", "20日均線"]},
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "處置第幾天", "即時股價", "昨收", "10日均線", "20日均線"]},
     }
 
     if sid not in strategies:
