@@ -603,13 +603,9 @@ def get_all_data():
     # 策略七：懶載入，點進頁面才計算（避免啟動 timeout）
     s7 = []
 
-    # 策略七B：處置第五天（第3~5個交易日）
+    # 策略七B：處置股（上市＋上櫃）
     s7b = []
     try:
-        disposal_url2 = "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json"
-        disposal_res2 = requests.get(disposal_url2, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-        disposal_data2 = disposal_res2.json()
-
         def roc_to_date2(s):
             y, m, d = s.strip().split("/")
             return pd.Timestamp(int(y)+1911, int(m), int(d))
@@ -618,20 +614,51 @@ def get_all_data():
         def roc_to_ad(m):
             return str(int(m.group(1)) + 1911) + "/" + m.group(2)
 
-        if disposal_data2.get("stat") == "OK":
-            rows = disposal_data2.get("data", [])
-            print(f"處置第五天：共{len(rows)}筆處置股資料")
+        # 抓上市
+        disposal_rows = []
+        try:
+            res_twse = requests.get("https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
+                                    headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
+            d_twse = res_twse.json()
+            if d_twse.get("stat") == "OK":
+                disposal_rows += d_twse.get("data", [])
+                print(f"處置股上市：{len(d_twse.get('data',[]))}筆")
+        except Exception as e:
+            print(f"處置股上市抓取失敗: {e}")
+
+        # 抓上櫃
+        try:
+            res_otc = requests.get("https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
+                                   headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
+            d_otc = res_otc.json()
+            otc_rows = d_otc.get("aaData", d_otc.get("data", []))
+            disposal_rows += otc_rows
+            print(f"處置股上櫃：{len(otc_rows)}筆")
+        except Exception as e:
+            print(f"處置股上櫃抓取失敗: {e}")
+
+        rows = disposal_rows
+        print(f"處置股合計：{len(rows)}筆")
+        if rows:
             for row in rows:
                 try:
-                    stock_id   = row[2].strip()
-                    stock_name = row[3].strip()
-                    date_period = row[6].strip() if len(row) > 6 else ""
+                    stock_id   = str(row[2]).strip()
+                    stock_name = str(row[3]).strip()
+                    date_period = str(row[6]).strip() if len(row) > 6 else ""
                     parts = date_period.replace(" ", "").replace("～", "~").split("~")
                     if len(parts) != 2:
                         print(f"  {stock_id} 日期格式錯誤: {date_period}")
                         continue
-                    start_date = roc_to_date2(parts[0])
-                    end_date_ts = roc_to_date2(parts[1])
+                    # 自動判斷民國年(3位數)或西元年(4位數)
+                    def parse_date(s):
+                        s = s.strip()
+                        y, m, d = s.split("/")
+                        if len(y) == 3:  # 民國年
+                            return pd.Timestamp(int(y)+1911, int(m), int(d))
+                        else:  # 西元年
+                            return pd.Timestamp(int(y), int(m), int(d))
+                    start_date = parse_date(parts[0])
+                    end_date_ts = parse_date(parts[1])
                     end_date_str = end_date_ts.strftime("%Y/%m/%d")
 
                     if stock_id not in close_3m.columns:
