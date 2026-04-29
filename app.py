@@ -550,6 +550,7 @@ def get_all_data():
     data.date_range = (start_3m, end_date)
     close = data.get("price:收盤價")
     open_ = data.get("price:開盤價")
+    stock_info = data.get("company_basic_info")
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
 
