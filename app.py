@@ -666,7 +666,7 @@ def get_all_data():
                     stock_id   = row[2].strip()
                     stock_name = row[3].strip()
                     date_period = row[6].strip() if len(row) > 6 else ""
-                    parts = date_period.replace(" ", "").split("~")
+                    parts = date_period.replace(" ", "").replace("～", "~").split("~")
                     if len(parts) != 2:
                         print(f"  {stock_id} 日期格式錯誤: {date_period}")
                         continue
