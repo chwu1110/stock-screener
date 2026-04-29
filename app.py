@@ -663,24 +663,32 @@ def get_all_data():
         print(f"處置股資料來源：共{len(disposal_today)}檔")
 
         def parse_period(period_str):
-            """解析處置期間，支援民國年和西元年，回傳 (start_ts, end_ts, period_ad)"""
-            period_str = period_str.replace(" ", "").replace("～", "~").replace("~", "~")
+            """解析處置期間，支援民國年/西元年、/或-分隔，回傳 (start_ts, end_ts, period_ad)"""
+            period_str = period_str.replace(" ", "").replace("～", "~")
             parts = period_str.split("~")
             if len(parts) != 2:
                 return None, None, period_str
             def to_ts(s):
-                s = s.strip()
-                y, m, d = s.split("/")
-                if len(y) == 3:
+                s = s.strip().replace("-", "/")
+                p = s.split("/")
+                if len(p) != 3:
+                    raise ValueError(f"無法解析: {s}")
+                y, m, d = p
+                if len(y) == 3:  # 民國年
                     return pd.Timestamp(int(y)+1911, int(m), int(d))
                 return pd.Timestamp(int(y), int(m), int(d))
+            def to_display(s):
+                s = s.strip().replace("-", "/")
+                p = s.split("/")
+                if len(p) == 3 and len(p[0]) == 3:
+                    return f"{int(p[0])+1911}/{p[1]}/{p[2]}"
+                return s
             try:
                 start_ts = to_ts(parts[0])
                 end_ts   = to_ts(parts[1])
-                # 轉西元顯示
-                period_ad = re.sub(r'(\d{3})/(\d{2}/\d{2})', lambda m: str(int(m.group(1))+1911)+"/"+m.group(2), period_str)
+                period_ad = f"{to_display(parts[0])}~{to_display(parts[1])}"
                 return start_ts, end_ts, period_ad
-            except:
+            except Exception as e:
                 return None, None, period_str
 
         for stock_id, info in disposal_today.items():
@@ -740,10 +748,20 @@ def get_all_data():
 
         s7b.sort(key=lambda x: x["_end_date"])
 
-        # 批次抓即時股價，並重新計算含今日即時價的均線
+        # 批次抓即時股價（用 TWSE/TPEX 批次 API，速度快）
         s7b_ids = [x["_stock_id"] for x in s7b]
         if s7b_ids:
-            rt_prices = get_realtime_prices(s7b_ids)
+            # 依市場分組批次抓取
+            twse_ids = [f"tse_{sid}.tw" for sid in s7b_ids]
+            otc_ids  = [sid for sid in s7b_ids]  # get_tpex_realtime 會自動加 otc_ 前綴
+            rt_twse  = get_twse_realtime(twse_ids)
+            rt_tpex  = get_tpex_realtime(otc_ids)
+            rt_prices = {**rt_twse, **rt_tpex}
+            # fallback: 抓不到的用 Fugle
+            missing = [sid for sid in s7b_ids if sid not in rt_prices]
+            if missing:
+                rt_fugle = get_realtime_prices(missing)
+                rt_prices.update(rt_fugle)
             for item in s7b:
                 item.pop("_end_date", None)
                 sid = item.pop("_stock_id")
