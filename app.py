@@ -51,33 +51,74 @@ def _fetch_disposal_twse():
     return stocks
 
 def _fetch_disposal_otc():
-    urls = [
+    """從 TPEX OpenAPI 抓上櫃處置股"""
+    headers = {"User-Agent": "Mozilla/5.0"}
+    stocks = {}
+
+    # 方法1：TPEX OpenAPI 官方端點
+    try:
+        resp = requests.get(
+            "https://www.tpex.org.tw/openapi/v1/tpex_disposal_information",
+            headers=headers, timeout=15, verify=False
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and data:
+                for row in data:
+                    try:
+                        sid   = str(row.get("SecuritiesCompanyCode", "")).strip()
+                        name  = str(row.get("CompanyName", "")).strip()
+                        start = str(row.get("DisposalStartDate", "")).strip()
+                        end   = str(row.get("DisposalEndDate", "")).strip()
+                        def to_ad(s):
+                            s = s.replace("-", "/")
+                            parts = s.split("/")
+                            if len(parts[0]) == 3:
+                                return f"{int(parts[0])+1911}/{parts[1]}/{parts[2]}"
+                            return s
+                        period = f"{to_ad(start)}~{to_ad(end)}" if start and end else ""
+                        is_20min = "20" in str(row.get("DisposalMethod", ""))
+                        if sid and sid not in stocks:
+                            stocks[sid] = {"name": name, "period": period,
+                                           "is_20min": is_20min, "market": "上櫃"}
+                    except:
+                        continue
+                if stocks:
+                    print(f"處置股上櫃抓取成功 (OpenAPI): {len(stocks)} 檔")
+                    return stocks
+    except Exception as e:
+        print(f"處置股上櫃 OpenAPI 失敗: {e}")
+
+    # 方法2：舊版 aaData 格式
+    for url in [
         "https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
         "https://www.tpex.org.tw/rwd/zh/announcement/punish?response=json",
-    ]
-    stocks = {}
-    for url in urls:
+    ]:
         try:
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15, verify=False)
+            resp = requests.get(url, headers=headers, timeout=15, verify=False)
             if resp.status_code != 200:
                 continue
-            d = resp.json()
-            rows = d.get("aaData", d.get("data", []))
+            data = resp.json()
+            rows = data.get("aaData", data.get("data", []))
             for row in rows:
                 try:
-                    sid  = str(row[2]).strip()
-                    name = str(row[3]).strip()
-                    period  = str(row[6]).strip() if len(row) > 6 else ""
-                    content = str(row[8]).strip() if len(row) > 8 else ""
+                    sid    = str(row[2]).strip()
+                    name   = str(row[3]).strip()
+                    period = str(row[6]).strip() if len(row) > 6 else ""
+                    content= str(row[8]).strip() if len(row) > 8 else ""
+                    is_20min = "20" in content or "二十分鐘" in content
                     if sid and sid not in stocks:
                         stocks[sid] = {"name": name, "period": period,
-                                       "is_20min": "二十分鐘" in content, "market": "上櫃"}
+                                       "is_20min": is_20min, "market": "上櫃"}
                 except:
                     continue
             if stocks:
-                break
+                print(f"處置股上櫃抓取成功 (legacy): {len(stocks)} 檔")
+                return stocks
         except Exception as e:
-            print(f"處置股上櫃抓取失敗: {e}")
+            print(f"處置股上櫃失敗 {url}: {e}")
+
+    print("處置股上櫃：所有方法皆失敗")
     return stocks
 
 def refresh_disposal_from_github():
