@@ -747,14 +747,34 @@ def get_all_data():
 
         s7b.sort(key=lambda x: x["處置第幾天"])
 
-        # 批次抓即時股價
+        # 批次抓即時股價，並重新計算含今日即時價的均線
         s7b_ids = [x["_stock_id"] for x in s7b]
         if s7b_ids:
             rt_prices = get_realtime_prices(s7b_ids)
             for item in s7b:
                 sid = item.pop("_stock_id")
                 rt = rt_prices.get(sid, {})
-                item["即時股價"] = rt.get("price", item["昨收"])
+                rt_price = rt.get("price", None)
+                item["即時股價"] = rt_price if rt_price else item["昨收"]
+
+                # 用即時股價重新計算10/20日均線（把今天即時價接在歷史序列後面）
+                if rt_price and sid in close_3m.columns:
+                    try:
+                        hist = close_3m[sid].dropna()
+                        # 建立包含今日即時價的新序列
+                        today_ts = pd.Timestamp(datetime.today().date())
+                        if hist.index[-1] < today_ts:
+                            # 今天尚未收盤，把即時價接在最後
+                            new_row = pd.Series([rt_price], index=[today_ts])
+                            prices_with_today = pd.concat([hist, new_row])
+                        else:
+                            # 今天已有收盤，用即時價覆蓋
+                            prices_with_today = hist.copy()
+                            prices_with_today.iloc[-1] = rt_price
+                        item["10日均線"] = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
+                        item["20日均線"] = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
+                    except Exception as e:
+                        print(f"重新計算均線失敗 {sid}: {e}")
 
         print(f"處置第五天: {len(s7b)}筆")
     except Exception as e:
