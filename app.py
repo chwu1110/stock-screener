@@ -1012,29 +1012,39 @@ def send_telegram(msg):
     except Exception as e:
         print(f"Telegram 發送失敗: {e}")
 
+_notified_today = {}  # {股票代號: 日期} 防止重複通知
+
 def check_and_notify_s7():
-    """檢查策略7：即時股價 <= 2月高點 * 0.82 就發 Telegram 通知"""
+    """每5分鐘檢查策略7：即時股價 <= 2月高點 * 0.82 就發 Telegram（每天每檔只通知一次）"""
+    global _notified_today
+    today_str = date.today().strftime("%Y-%m-%d")
+    _notified_today = {k: v for k, v in _notified_today.items() if v == today_str}
+
+    now = datetime.now()
+    if not (9 <= now.hour < 13 or (now.hour == 13 and now.minute <= 35)):
+        return
+
     try:
         s7 = get_s7_data()
         alerts = []
         for stock in s7:
+            sid = stock["股票代號"]
+            if _notified_today.get(sid) == today_str:
+                continue
             price = stock.get("即時股價", 0)
             high = stock.get("2月高點", 0)
             if high > 0 and price > 0 and price <= high * 0.82:
                 drop_pct = (price - high) / high * 100
-                sid = stock["股票代號"]
                 name = stock["股票名稱"]
                 ma10 = stock.get("10日均線", "-")
                 ma20 = stock.get("20日均線", "-")
                 line = f"<b>{sid} {name}</b>\n即時價: {price} | 2月高點: {high} | 跌幅: {drop_pct:.1f}%\n10日線: {ma10} | 20日線: {ma20}"
                 alerts.append(line)
+                _notified_today[sid] = today_str
         if alerts:
             msg = "\U0001F4C9 <b>處置股跌破高點82%警示</b>\n\n" + "\n\n".join(alerts)
-
             send_telegram(msg)
             print(f"[Telegram] 發送 {len(alerts)} 筆警示")
-        else:
-            print("[Telegram] 無符合條件的股票")
     except Exception as e:
         print(f"check_and_notify_s7 錯誤: {e}")
 
@@ -1043,8 +1053,7 @@ scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 scheduler.add_job(update_disposal_history, "cron", hour=14, minute=30)
 scheduler.add_job(refresh_disposal_from_github, "cron", hour=14, minute=35)  # 本機push後Railway自動同步
 scheduler.add_job(lambda: (_cache.update({"data": None, "time": None}), _s7_cache.update({"data": None, "time": None})), "cron", hour=15, minute=0)
-scheduler.add_job(check_and_notify_s7, "cron", hour=10, minute=0)   # 早上10點檢查
-scheduler.add_job(check_and_notify_s7, "cron", hour=13, minute=0)   # 下午1點檢查
+scheduler.add_job(check_and_notify_s7, "interval", minutes=5)  # 每5分鐘檢查一次
 scheduler.start()
 
 # 啟動時立刻從 GitHub 載入最新處置股資料
