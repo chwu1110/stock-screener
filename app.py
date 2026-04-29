@@ -403,6 +403,7 @@ def get_all_data():
 
     data.date_range = (start_3m, end_date)
     close = data.get("price:收盤價")
+    high  = data.get("price:最高價")
     stock_info = data.get("company_basic_info")
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
@@ -411,15 +412,18 @@ def get_all_data():
     _global_industry_dict = industry_dict
 
     close_df = pd.DataFrame(close.values, index=pd.to_datetime(close.index.astype(str)), columns=close.columns)
+    high_df  = pd.DataFrame(high.values,  index=pd.to_datetime(high.index.astype(str)),  columns=high.columns)
 
     # 釋放原始資料節省記憶體
-    del close, stock_info
+    del close, high, stock_info
 
     close_3m = close_df[close_df.index >= pd.to_datetime(start_3m)]
+    high_3m  = high_df[high_df.index   >= pd.to_datetime(start_3m)]
 
     # 存進全域，供即時策略12使用
-    global _global_close_3m
+    global _global_close_3m, _global_high_3m
     _global_close_3m = close_3m
+    _global_high_3m  = high_3m
 
     close_1m = close_df[close_df.index >= pd.to_datetime(start_1m)]
 
@@ -731,6 +735,8 @@ def get_all_data():
 # 快取資料
 _cache = {"data": None, "time": None}
 _global_disposal_2m = {}
+_global_close_3m = None
+_global_high_3m = None
 _global_s1 = []
 _global_s3 = []
 _global_s4 = []
@@ -765,6 +771,7 @@ def get_s7_data():
     try:
         disposal_stocks_2m = _global_disposal_2m
         close_3m = _global_close_3m
+        high_3m  = _global_high_3m
 
         if not disposal_stocks_2m or close_3m is None:
             return s7
@@ -783,7 +790,11 @@ def get_s7_data():
                 current_ma10 = ma10.iloc[-1]
                 current_ma20 = ma20.iloc[-1]
                 two_m_ago = pd.Timestamp(datetime.today().date()) - pd.Timedelta(days=60)
-                high_2m = prices[prices.index >= two_m_ago].max()
+                if high_3m is not None and stock_id in high_3m.columns:
+                    highs = high_3m[stock_id].dropna()
+                    high_2m = highs[highs.index >= two_m_ago].max()
+                else:
+                    high_2m = prices[prices.index >= two_m_ago].max()
 
                 if pd.isna(current_ma10) or pd.isna(current_ma20):
                     continue
@@ -839,7 +850,13 @@ def get_s7_data():
                         new_ma10 = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
                         new_ma20 = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
                         two_m_ago = pd.Timestamp(datetime.today().date()) - pd.Timedelta(days=60)
-                        new_high = round(prices_with_today[prices_with_today.index >= two_m_ago].max(), 2)
+                        if high_3m is not None and sid in high_3m.columns:
+                            highs = high_3m[sid].dropna()
+                            hist_high = highs[highs.index >= two_m_ago].max()
+                        else:
+                            hist_high = prices_with_today[prices_with_today.index >= two_m_ago].max()
+                        # 和今日即時價比較取最大
+                        new_high = round(max(hist_high, rt_price), 2)
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
                         item["2月高點"] = new_high
