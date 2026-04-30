@@ -1038,7 +1038,11 @@ def check_and_notify_s7():
                 name = stock["股票名稱"]
                 ma10 = stock.get("10日均線", "-")
                 ma20 = stock.get("20日均線", "-")
-                line = f"<b>{sid} {name}</b>\n即時價: {price} | 2月高點: {high} | 跌幅: {drop_pct:.1f}%\n10日線: {ma10} | 20日線: {ma20}"
+                # 判斷是否還在處置中（今天的處置股清單裡有的就是）
+                today_disposal = _disposal_history.get(today_str, {})
+                is_active = sid in today_disposal
+                status = "🔴 處置中" if is_active else "⚪ 已結束"
+                line = f"{status} <b>{sid} {name}</b>\n即時價: {price} | 2月高點: {high} | 跌幅: {drop_pct:.1f}%\n10日線: {ma10} | 20日線: {ma20}"
                 alerts.append(line)
                 _notified_today[sid] = today_str
         if alerts:
