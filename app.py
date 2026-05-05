@@ -768,8 +768,9 @@ def get_all_data():
                 else:
                     high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
 
-                # 20天最低價
-                low_20d = round(prices.iloc[-20:].min(), 2) if len(prices) >= 20 else round(prices.min(), 2)
+                # 處置期間最低點
+                disposal_prices = prices[prices.index >= start_date]
+                low_20d = round(disposal_prices.min(), 2) if len(disposal_prices) > 0 else round(prices.iloc[-1], 2)
 
                 if pd.isna(current_ma10) or pd.isna(current_ma20):
                     continue
@@ -783,7 +784,7 @@ def get_all_data():
                     "即時股價": round(hist_price, 2),
                     "昨收": round(hist_price, 2),
                     "20日高點": round(high_10d, 2),
-                    "20日最低": low_20d,
+                    "處置期間最低": low_20d,
                     "10日均線": round(current_ma10, 2),
                     "20日均線": round(current_ma20, 2),
                     "_below_ma10": hist_price < current_ma10,
@@ -838,9 +839,10 @@ def get_all_data():
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
                         item["20日高點"] = high_10d
-                        # 20天最低（加入即時價後取最小）
-                        low_20_hist = prices_with_today.iloc[-20:].min() if len(prices_with_today) >= 20 else prices_with_today.min()
-                        item["20日最低"] = round(min(low_20_hist, rt_price), 2)
+                        # 處置期間最低（加入即時價後取最小）
+                        disposal_prices_rt = prices_with_today[prices_with_today.index >= start_date]
+                        low_disposal = disposal_prices_rt.min() if len(disposal_prices_rt) > 0 else rt_price
+                        item["處置期間最低"] = round(min(low_disposal, rt_price), 2)
                         item["_below_ma10"] = rt_price < new_ma10
                     except Exception as e:
                         print(f"重新計算均線失敗 {sid}: {e}")
@@ -1022,7 +1024,7 @@ def strategy(sid):
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: None,  # 懶載入，下方單獨處理
         14: {"title": "處置股", "icon": "📅", "desc": "目前正在被處置的股票，最快出關的在前",
-            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "20日高點", "20日最低", "10日均線", "20日均線"],
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "20日高點", "處置期間最低", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7b if x.get("_below_ma10")}},
     }
 
