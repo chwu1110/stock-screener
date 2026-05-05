@@ -482,6 +482,7 @@ def get_all_data():
     data.date_range = (start_3m, end_date)
     close = data.get("price:收盤價")
     high  = data.get("price:最高價")
+    low   = data.get("price:最低價")
     stock_info = data.get("company_basic_info")
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
@@ -491,17 +492,20 @@ def get_all_data():
 
     close_df = pd.DataFrame(close.values, index=pd.to_datetime(close.index.astype(str)), columns=close.columns)
     high_df  = pd.DataFrame(high.values,  index=pd.to_datetime(high.index.astype(str)),  columns=high.columns)
+    low_df   = pd.DataFrame(low.values,   index=pd.to_datetime(low.index.astype(str)),   columns=low.columns)
 
     # 釋放原始資料節省記憶體
-    del close, high, stock_info
+    del close, high, low, stock_info
 
     close_3m = close_df[close_df.index >= pd.to_datetime(start_3m)]
     high_3m  = high_df[high_df.index   >= pd.to_datetime(start_3m)]
+    low_3m   = low_df[low_df.index     >= pd.to_datetime(start_3m)]
 
-    # 存進全域，供即時策略12使用
-    global _global_close_3m, _global_high_3m
+    # 存進全域
+    global _global_close_3m, _global_high_3m, _global_low_3m
     _global_close_3m = close_3m
     _global_high_3m  = high_3m
+    _global_low_3m   = low_3m
 
     close_1m = close_df[close_df.index >= pd.to_datetime(start_1m)]
 
@@ -685,6 +689,7 @@ def get_all_data():
     s7b = []
     try:
         import re
+        low_3m = _global_low_3m  # 盤中最低價
 
         # 取今天或最近一天的處置股資料（已包含上市+上櫃）
         today_str = date.today().strftime("%Y-%m-%d")
@@ -768,9 +773,18 @@ def get_all_data():
                 else:
                     high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
 
-                # 處置期間最低點
-                disposal_prices = prices[prices.index >= start_date]
-                low_20d = round(disposal_prices.min(), 2) if len(disposal_prices) > 0 else round(prices.iloc[-1], 2)
+                # 處置期間最低點（用盤中最低價）
+                low_day = None
+                low_val = None
+                if stock_id in low_3m.columns:
+                    low_series = low_3m[stock_id].dropna()
+                    disposal_lows = low_series[low_series.index >= start_date]
+                    if len(disposal_lows) > 0:
+                        low_val = round(disposal_lows.min(), 2)
+                        low_day_idx = disposal_lows.values.argmin()
+                        low_day = low_day_idx + 1  # 第幾天（從1開始）
+
+                low_display = f"{low_val}（第{low_day}天）" if low_val is not None else "-"
 
                 if pd.isna(current_ma10) or pd.isna(current_ma20):
                     continue
@@ -784,7 +798,7 @@ def get_all_data():
                     "即時股價": round(hist_price, 2),
                     "昨收": round(hist_price, 2),
                     "20日高點": round(high_10d, 2),
-                    "處置期間最低": low_20d,
+                    "處置期間最低": low_display,
                     "10日均線": round(current_ma10, 2),
                     "20日均線": round(current_ma20, 2),
                     "_below_ma10": hist_price < current_ma10,
@@ -839,10 +853,8 @@ def get_all_data():
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
                         item["20日高點"] = high_10d
-                        # 處置期間最低（加入即時價後取最小）
-                        disposal_prices_rt = prices_with_today[prices_with_today.index >= start_date]
-                        low_disposal = disposal_prices_rt.min() if len(disposal_prices_rt) > 0 else rt_price
-                        item["處置期間最低"] = round(min(low_disposal, rt_price), 2)
+                        # 處置期間最低：即時更新當天最低（保留原有格式不變）
+                        pass  # 處置期間最低已在初始計算時設定，即時不重算
                         item["_below_ma10"] = rt_price < new_ma10
                     except Exception as e:
                         print(f"重新計算均線失敗 {sid}: {e}")
@@ -870,6 +882,7 @@ _cache = {"data": None, "time": None}
 _global_disposal_2m = {}
 _global_close_3m = None
 _global_high_3m = None
+_global_low_3m = None
 _global_s1 = []
 _global_s3 = []
 _global_s4 = []
