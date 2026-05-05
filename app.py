@@ -274,7 +274,7 @@ DETAIL_TEMPLATE = """
         .stat-box .label { font-size: 12px; color: #94a3b8; }
         .btn-export { background: #059669; color: white; border: none; border-radius: 8px; padding: 8px 18px; cursor: pointer; font-size: 13px; font-family: inherit; }
         .btn-export:hover { background: #047857; }
-        .table-wrap { overflow-x: auto; border-radius: 12px; }
+        .table-wrap { overflow-x: auto; border-radius: 12px; max-height: calc(100vh - 180px); overflow-y: auto; }
         table { width: 100%; border-collapse: collapse; background: #1e293b; }
         thead { position: sticky; top: 0; z-index: 10; }
         thead tr { background: #0f172a; }
@@ -344,20 +344,24 @@ function exportCSV() {
     var table = document.getElementById('main-table');
     if (!table) return;
     var rows = table.querySelectorAll('tr');
-    var csv = '\ufeff';
+    var lines = [];
     rows.forEach(function(row) {
         var cells = row.querySelectorAll('th, td');
         var rowData = Array.from(cells).map(function(cell) {
             var text = cell.textContent.trim().replace(/,/g, '，');
             return '"' + text + '"';
         });
-        csv += rowData.join(',') + '\n';
+        lines.push(rowData.join(','));
     });
+    var csv = '﻿' + lines.join('
+');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = '{{ title }}_' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
 }
 </script>
 </body>
