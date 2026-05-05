@@ -268,13 +268,18 @@ DETAIL_TEMPLATE = """
         .back:hover { text-decoration: underline; }
         h1 { font-size: 22px; margin-bottom: 6px; color: #f8fafc; }
         .subtitle { color: #94a3b8; font-size: 13px; margin-bottom: 24px; }
-        .stat-box { display: inline-block; background: #1e293b; border-radius: 10px; padding: 8px 20px; margin-bottom: 20px; }
+        .top-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+        .stat-box { display: inline-block; background: #1e293b; border-radius: 10px; padding: 8px 20px; }
         .stat-box .num { font-size: 22px; font-weight: bold; color: #38bdf8; }
         .stat-box .label { font-size: 12px; color: #94a3b8; }
-        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden; }
+        .btn-export { background: #059669; color: white; border: none; border-radius: 8px; padding: 8px 18px; cursor: pointer; font-size: 13px; font-family: inherit; }
+        .btn-export:hover { background: #047857; }
+        .table-wrap { overflow-x: auto; border-radius: 12px; }
+        table { width: 100%; border-collapse: collapse; background: #1e293b; }
+        thead { position: sticky; top: 0; z-index: 10; }
         thead tr { background: #0f172a; }
-        th { padding: 12px 16px; text-align: left; font-size: 13px; color: #94a3b8; font-weight: 600; }
-        td { padding: 11px 16px; font-size: 14px; border-top: 1px solid #334155; }
+        th { padding: 12px 16px; text-align: left; font-size: 13px; color: #94a3b8; font-weight: 600; white-space: nowrap; border-bottom: 1px solid #334155; }
+        td { padding: 11px 16px; font-size: 14px; border-top: 1px solid #334155; white-space: nowrap; }
         tr:hover td { background: #263548; }
         .gain { color: #4ade80; font-weight: bold; }
         .loss { color: #f87171; font-weight: bold; }
@@ -290,13 +295,19 @@ DETAIL_TEMPLATE = """
     <h1>{{ icon }} {{ title }}</h1>
     <p class="subtitle">{{ desc }}</p>
 
-    <div class="stat-box">
-        <div class="num">{{ stocks|length }}</div>
-        <div class="label">符合股票數</div>
+    <div class="top-bar">
+        <div class="stat-box">
+            <div class="num">{{ stocks|length }}</div>
+            <div class="label">符合股票數</div>
+        </div>
+        {% if stocks %}
+        <button class="btn-export" onclick="exportCSV()">匯出 CSV</button>
+        {% endif %}
     </div>
 
     {% if stocks %}
-    <table>
+    <div class="table-wrap">
+    <table id="main-table">
         <thead>
             <tr>
                 {% for col in columns %}
@@ -321,11 +332,34 @@ DETAIL_TEMPLATE = """
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <div class="empty">❌ 沒有找到符合條件的股票</div>
     {% endif %}
 
     <p class="updated">資料來源：FinLab｜更新時間：{{ update_time }}</p>
+
+<script>
+function exportCSV() {
+    var table = document.getElementById('main-table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tr');
+    var csv = '\ufeff';
+    rows.forEach(function(row) {
+        var cells = row.querySelectorAll('th, td');
+        var rowData = Array.from(cells).map(function(cell) {
+            var text = cell.textContent.trim().replace(/,/g, '，');
+            return '"' + text + '"';
+        });
+        csv += rowData.join(',') + '\n';
+    });
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '{{ title }}_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+}
+</script>
 </body>
 </html>
 """
@@ -734,6 +768,9 @@ def get_all_data():
                 else:
                     high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
 
+                # 20天最低價
+                low_20d = round(prices.iloc[-20:].min(), 2) if len(prices) >= 20 else round(prices.min(), 2)
+
                 if pd.isna(current_ma10) or pd.isna(current_ma20):
                     continue
 
@@ -743,8 +780,10 @@ def get_all_data():
                     "處置期間": date_period_ad,
                     "出關日": end_date_str,
                     "處置第幾天": f"第{today_idx}天",
+                    "即時股價": round(hist_price, 2),
                     "昨收": round(hist_price, 2),
                     "20日高點": round(high_10d, 2),
+                    "20日最低": low_20d,
                     "10日均線": round(current_ma10, 2),
                     "20日均線": round(current_ma20, 2),
                     "_below_ma10": hist_price < current_ma10,
@@ -799,6 +838,9 @@ def get_all_data():
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
                         item["20日高點"] = high_10d
+                        # 20天最低（加入即時價後取最小）
+                        low_20_hist = prices_with_today.iloc[-20:].min() if len(prices_with_today) >= 20 else prices_with_today.min()
+                        item["20日最低"] = round(min(low_20_hist, rt_price), 2)
                         item["_below_ma10"] = rt_price < new_ma10
                     except Exception as e:
                         print(f"重新計算均線失敗 {sid}: {e}")
@@ -980,7 +1022,7 @@ def strategy(sid):
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: None,  # 懶載入，下方單獨處理
         14: {"title": "處置股", "icon": "📅", "desc": "目前正在被處置的股票，最快出關的在前",
-            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "20日高點", "10日均線", "20日均線"],
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "20日高點", "20日最低", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7b if x.get("_below_ma10")}},
     }
 
