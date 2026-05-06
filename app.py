@@ -268,13 +268,18 @@ DETAIL_TEMPLATE = """
         .back:hover { text-decoration: underline; }
         h1 { font-size: 22px; margin-bottom: 6px; color: #f8fafc; }
         .subtitle { color: #94a3b8; font-size: 13px; margin-bottom: 24px; }
-        .stat-box { display: inline-block; background: #1e293b; border-radius: 10px; padding: 8px 20px; margin-bottom: 20px; }
+        .top-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+        .stat-box { display: inline-block; background: #1e293b; border-radius: 10px; padding: 8px 20px; }
         .stat-box .num { font-size: 22px; font-weight: bold; color: #38bdf8; }
         .stat-box .label { font-size: 12px; color: #94a3b8; }
-        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 12px; overflow: hidden; }
+        .btn-export { background: #059669; color: white; border: none; border-radius: 8px; padding: 8px 18px; cursor: pointer; font-size: 13px; font-family: inherit; }
+        .btn-export:hover { background: #047857; }
+        .table-wrap { overflow-x: auto; border-radius: 12px; max-height: calc(100vh - 180px); overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; background: #1e293b; }
+        thead { position: sticky; top: 0; z-index: 10; }
         thead tr { background: #0f172a; }
-        th { padding: 12px 16px; text-align: left; font-size: 13px; color: #94a3b8; font-weight: 600; }
-        td { padding: 11px 16px; font-size: 14px; border-top: 1px solid #334155; }
+        th { padding: 12px 16px; text-align: left; font-size: 13px; color: #94a3b8; font-weight: 600; white-space: nowrap; border-bottom: 1px solid #334155; }
+        td { padding: 11px 16px; font-size: 14px; border-top: 1px solid #334155; white-space: nowrap; }
         tr:hover td { background: #263548; }
         .gain { color: #4ade80; font-weight: bold; }
         .loss { color: #f87171; font-weight: bold; }
@@ -290,13 +295,19 @@ DETAIL_TEMPLATE = """
     <h1>{{ icon }} {{ title }}</h1>
     <p class="subtitle">{{ desc }}</p>
 
-    <div class="stat-box">
-        <div class="num">{{ stocks|length }}</div>
-        <div class="label">符合股票數</div>
+    <div class="top-bar">
+        <div class="stat-box">
+            <div class="num">{{ stocks|length }}</div>
+            <div class="label">符合股票數</div>
+        </div>
+        {% if stocks %}
+        <button class="btn-export" onclick="exportCSV()">匯出 CSV</button>
+        {% endif %}
     </div>
 
     {% if stocks %}
-    <table>
+    <div class="table-wrap">
+    <table id="main-table">
         <thead>
             <tr>
                 {% for col in columns %}
@@ -321,11 +332,38 @@ DETAIL_TEMPLATE = """
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <div class="empty">❌ 沒有找到符合條件的股票</div>
     {% endif %}
 
     <p class="updated">資料來源：FinLab｜更新時間：{{ update_time }}</p>
+
+<script>
+function exportCSV() {
+    var table = document.getElementById('main-table');
+    if (!table) return;
+    var rows = table.querySelectorAll('tr');
+    var lines = [];
+    rows.forEach(function(row) {
+        var cells = row.querySelectorAll('th, td');
+        var rowData = Array.from(cells).map(function(cell) {
+            var text = cell.textContent.trim().replace(/,/g, '，');
+            return '"' + text + '"';
+        });
+        lines.push(rowData.join(','));
+    });
+    var csv = '﻿' + lines.join('
+');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '{{ title }}_' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+</script>
 </body>
 </html>
 """
@@ -448,6 +486,7 @@ def get_all_data():
     data.date_range = (start_3m, end_date)
     close = data.get("price:收盤價")
     high  = data.get("price:最高價")
+    low   = data.get("price:最低價")
     stock_info = data.get("company_basic_info")
     name_dict = stock_info.set_index("stock_id")["公司簡稱"].to_dict()
     industry_dict = stock_info.set_index("stock_id")["產業類別"].to_dict()
@@ -457,17 +496,20 @@ def get_all_data():
 
     close_df = pd.DataFrame(close.values, index=pd.to_datetime(close.index.astype(str)), columns=close.columns)
     high_df  = pd.DataFrame(high.values,  index=pd.to_datetime(high.index.astype(str)),  columns=high.columns)
+    low_df   = pd.DataFrame(low.values,   index=pd.to_datetime(low.index.astype(str)),   columns=low.columns)
 
     # 釋放原始資料節省記憶體
-    del close, high, stock_info
+    del close, high, low, stock_info
 
     close_3m = close_df[close_df.index >= pd.to_datetime(start_3m)]
     high_3m  = high_df[high_df.index   >= pd.to_datetime(start_3m)]
+    low_3m   = low_df[low_df.index     >= pd.to_datetime(start_3m)]
 
-    # 存進全域，供即時策略12使用
-    global _global_close_3m, _global_high_3m
+    # 存進全域
+    global _global_close_3m, _global_high_3m, _global_low_3m
     _global_close_3m = close_3m
     _global_high_3m  = high_3m
+    _global_low_3m   = low_3m
 
     close_1m = close_df[close_df.index >= pd.to_datetime(start_1m)]
 
@@ -651,6 +693,7 @@ def get_all_data():
     s7b = []
     try:
         import re
+        low_3m = _global_low_3m  # 盤中最低價
 
         # 取今天或最近一天的處置股資料（已包含上市+上櫃）
         today_str = date.today().strftime("%Y-%m-%d")
@@ -734,6 +777,19 @@ def get_all_data():
                 else:
                     high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
 
+                # 處置期間最低點（用盤中最低價）
+                low_day = None
+                low_val = None
+                if stock_id in low_3m.columns:
+                    low_series = low_3m[stock_id].dropna()
+                    disposal_lows = low_series[low_series.index >= start_date]
+                    if len(disposal_lows) > 0:
+                        low_val = round(disposal_lows.min(), 2)
+                        low_day_idx = disposal_lows.values.argmin()
+                        low_day = low_day_idx + 1  # 第幾天（從1開始）
+
+                low_display = f"{low_val}（第{low_day}天）" if low_val is not None else "-"
+
                 if pd.isna(current_ma10) or pd.isna(current_ma20):
                     continue
 
@@ -743,8 +799,10 @@ def get_all_data():
                     "處置期間": date_period_ad,
                     "出關日": end_date_str,
                     "處置第幾天": f"第{today_idx}天",
+                    "即時股價": round(hist_price, 2),
                     "昨收": round(hist_price, 2),
                     "20日高點": round(high_10d, 2),
+                    "處置期間最低": low_display,
                     "10日均線": round(current_ma10, 2),
                     "20日均線": round(current_ma20, 2),
                     "_below_ma10": hist_price < current_ma10,
@@ -799,6 +857,8 @@ def get_all_data():
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
                         item["20日高點"] = high_10d
+                        # 處置期間最低：即時更新當天最低（保留原有格式不變）
+                        pass  # 處置期間最低已在初始計算時設定，即時不重算
                         item["_below_ma10"] = rt_price < new_ma10
                     except Exception as e:
                         print(f"重新計算均線失敗 {sid}: {e}")
@@ -826,6 +886,7 @@ _cache = {"data": None, "time": None}
 _global_disposal_2m = {}
 _global_close_3m = None
 _global_high_3m = None
+_global_low_3m = None
 _global_s1 = []
 _global_s3 = []
 _global_s4 = []
@@ -980,7 +1041,7 @@ def strategy(sid):
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: None,  # 懶載入，下方單獨處理
         14: {"title": "處置股", "icon": "📅", "desc": "目前正在被處置的股票，最快出關的在前",
-            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "20日高點", "10日均線", "20日均線"],
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "20日高點", "處置期間最低", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7b if x.get("_below_ma10")}},
     }
 
@@ -1062,12 +1123,6 @@ scheduler.start()
 
 # 啟動時立刻從 GitHub 載入最新處置股資料
 refresh_disposal_from_github()
-
-# 如果今天沒有處置股資料，立刻抓一次
-today_str = date.today().strftime("%Y-%m-%d")
-if today_str not in _disposal_history or not _disposal_history.get(today_str):
-    print(f"今天 {today_str} 無處置股資料，立刻抓取...")
-    update_disposal_history()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
