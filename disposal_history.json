@@ -187,52 +187,6 @@
       "market": "上市"
     }
   },
-  "2026-03-02": {
-    "2455": {
-      "name": "全新",
-      "period": "115/03/02～115/03/13"
-    },
-    "2489": {
-      "name": "瑞軒",
-      "period": "115/03/02～115/03/13"
-    },
-    "3167": {
-      "name": "大量",
-      "period": "115/02/24～115/03/10"
-    },
-    "6426": {
-      "name": "統新",
-      "period": "115/03/02～115/03/13"
-    },
-    "7610": {
-      "name": "聯友金屬-創",
-      "period": "115/03/02～115/03/13"
-    },
-    "8046": {
-      "name": "南電",
-      "period": "115/03/02～115/03/13"
-    },
-    "8996": {
-      "name": "高力",
-      "period": "115/02/25～115/03/11"
-    },
-    "2360": {
-      "name": "致茂",
-      "period": "115/03/03～115/03/16"
-    },
-    "3037": {
-      "name": "欣興",
-      "period": "115/03/03～115/03/16"
-    },
-    "4927": {
-      "name": "泰鼎-KY",
-      "period": "115/03/03～115/03/16"
-    },
-    "6861": {
-      "name": "睿生光電",
-      "period": "115/03/03～115/03/16"
-    }
-  },
   "2026-03-03": {
     "2360": {
       "name": "致茂",
@@ -6683,6 +6637,542 @@
     "8043": {
       "name": "蜜望實",
       "period": "2026/04/20~2026/05/04",
+      "is_20min": false,
+      "market": "上櫃"
+    }
+  },
+  "2026-05-07": {
+    "05722U": {
+      "name": "台灣50凱基55售05",
+      "period": "115/04/27～115/05/11",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "1597": {
+      "name": "直得",
+      "period": "115/05/07～115/05/20",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "1623": {
+      "name": "大東電",
+      "period": "115/04/24～115/05/08",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "1711": {
+      "name": "永光",
+      "period": "115/04/24～115/05/08",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "1721": {
+      "name": "三晃",
+      "period": "115/04/24～115/05/08",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "2233": {
+      "name": "宇隆",
+      "period": "115/05/07～115/05/20",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "2429": {
+      "name": "銘旺科",
+      "period": "115/04/28～115/05/12",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "2454": {
+      "name": "聯發科",
+      "period": "115/05/07～115/05/20",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "2455": {
+      "name": "全新",
+      "period": "115/05/06～115/05/19",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "2486": {
+      "name": "一詮",
+      "period": "115/05/07～115/05/20",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "3016": {
+      "name": "嘉晶",
+      "period": "115/05/07～115/05/20",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "3167": {
+      "name": "大量",
+      "period": "115/05/05～115/05/18",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "3229": {
+      "name": "晟鈦",
+      "period": "115/04/24～115/05/08",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "3518": {
+      "name": "柏騰",
+      "period": "115/04/23～115/05/07",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "3653": {
+      "name": "健策",
+      "period": "115/04/24～115/05/08",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "4764": {
+      "name": "雙鍵",
+      "period": "115/05/07～115/05/20",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "4960": {
+      "name": "誠美材",
+      "period": "115/04/23～115/05/07",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "6213": {
+      "name": "聯茂",
+      "period": "115/04/23～115/05/11",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "6405": {
+      "name": "悅城",
+      "period": "115/05/06～115/05/19",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "6415": {
+      "name": "矽力*-KY",
+      "period": "115/04/24～115/05/08",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "6443": {
+      "name": "元晶",
+      "period": "115/04/28～115/05/12",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "6531": {
+      "name": "愛普*",
+      "period": "115/04/27～115/05/11",
+      "is_20min": false,
+      "market": "上市"
+    },
+    "6658": {
+      "name": "聯策",
+      "period": "115/05/05～115/05/18",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "6861": {
+      "name": "睿生光電",
+      "period": "115/05/05～115/05/18",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "7711": {
+      "name": "永擎",
+      "period": "115/04/29～115/05/13",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "8021": {
+      "name": "尖點",
+      "period": "115/04/27～115/05/11",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "8271": {
+      "name": "宇瞻",
+      "period": "115/04/24～115/05/08",
+      "is_20min": true,
+      "market": "上市"
+    },
+    "22331": {
+      "name": "宇隆一",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "24866": {
+      "name": "一詮六",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "30165": {
+      "name": "嘉晶五",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "3163": {
+      "name": "波若威",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "4542": {
+      "name": "科嶠",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "45421": {
+      "name": "科嶠一",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "4908": {
+      "name": "前鼎",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "6683": {
+      "name": "雍智科技",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "8064": {
+      "name": "東捷",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "8291": {
+      "name": "尚茂",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "24552": {
+      "name": "全新二",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "24553": {
+      "name": "全新三",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "8027": {
+      "name": "鈦昇",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "80273": {
+      "name": "鈦昇三",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "31672": {
+      "name": "大量二",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "4951": {
+      "name": "精拓科",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "6234": {
+      "name": "高僑",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "731240": {
+      "name": "金麗科元富61購01",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "9949": {
+      "name": "琉園",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "4529": {
+      "name": "淳紳",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "6735": {
+      "name": "美達科技",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "7751": {
+      "name": "竑騰",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "7734": {
+      "name": "印能科技",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "3228": {
+      "name": "金麗科",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "3430": {
+      "name": "奇鈦科",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "3581": {
+      "name": "博磊",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "3631": {
+      "name": "晟楠",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "4971": {
+      "name": "IET-KY",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "6217": {
+      "name": "中探針",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "80212": {
+      "name": "尖點二",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "3363": {
+      "name": "上詮",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "4768": {
+      "name": "晶呈科技",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "5498": {
+      "name": "凱崴",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "6423": {
+      "name": "億而得",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "6643": {
+      "name": "M31",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "706140": {
+      "name": "蜜望實統一66購01",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "8092": {
+      "name": "建暐",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "80924": {
+      "name": "建暐四",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "3221": {
+      "name": "台嘉碩",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "3339": {
+      "name": "泰谷",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "33881": {
+      "name": "崇越電一",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "35181": {
+      "name": "柏騰一",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "49793": {
+      "name": "華星光三",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "49794": {
+      "name": "華星光四",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "6829": {
+      "name": "千附精密",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "3388": {
+      "name": "崇越電",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "3529": {
+      "name": "力旺",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "4939": {
+      "name": "亞電",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "5475": {
+      "name": "德宏",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "64422": {
+      "name": "光聖二",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "64423": {
+      "name": "光聖三",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "8182": {
+      "name": "加高",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "8289": {
+      "name": "泰藝",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "8358": {
+      "name": "金居",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "3555": {
+      "name": "博士旺",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "4979": {
+      "name": "華星光",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "5340": {
+      "name": "建榮",
+      "period": "",
+      "is_20min": true,
+      "market": "上櫃"
+    },
+    "6173": {
+      "name": "信昌電",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "6208": {
+      "name": "日揚",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "65152": {
+      "name": "穎崴二",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "6791": {
+      "name": "虎門科技",
+      "period": "",
+      "is_20min": false,
+      "market": "上櫃"
+    },
+    "72381U": {
+      "name": "萬潤群益56售01",
+      "period": "",
       "is_20min": false,
       "market": "上櫃"
     }
