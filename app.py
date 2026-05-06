@@ -771,14 +771,17 @@ def get_all_data():
                 hist_price = prices.iloc[-1]
                 current_ma10 = ma10.iloc[-1]
                 current_ma20 = ma20.iloc[-1]
-                # 處置前20日高點（處置開始日之前的20個交易日）
+                # 處置前20日高點（處置開始日不含，取之前最近20個交易日）
                 if stock_id in high_3m.columns:
                     h = high_3m[stock_id].dropna()
                     pre_highs = h[h.index < start_date]
-                    high_10d = pre_highs.iloc[-20:].max() if len(pre_highs) >= 20 else (pre_highs.max() if len(pre_highs) > 0 else h.max())
+                    if len(pre_highs) == 0:
+                        # start_date 可能是非交易日，往前找
+                        pre_highs = h[h.index <= start_date].iloc[:-1] if len(h[h.index <= start_date]) > 0 else h.iloc[:0]
+                    high_10d = pre_highs.iloc[-20:].max() if len(pre_highs) > 0 else h.max()
                 else:
                     pre_prices = prices[prices.index < start_date]
-                    high_10d = pre_prices.iloc[-20:].max() if len(pre_prices) >= 20 else (pre_prices.max() if len(pre_prices) > 0 else prices.max())
+                    high_10d = pre_prices.iloc[-20:].max() if len(pre_prices) > 0 else prices.max()
 
                 # 處置期間最低點（用盤中最低價）
                 low_day = None
