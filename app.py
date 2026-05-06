@@ -362,6 +362,18 @@ function exportCSV() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+});
+        lines.push(rowData.join(','));
+    });
+    var csv = '﻿' + lines.join('
+');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '{{ title }}_' + new Date().toISOString().slice(0,10) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }
 </script>
 </body>
