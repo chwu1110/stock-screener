@@ -771,11 +771,14 @@ def get_all_data():
                 hist_price = prices.iloc[-1]
                 current_ma10 = ma10.iloc[-1]
                 current_ma20 = ma20.iloc[-1]
+                # 處置前20日高點（處置開始日之前的20個交易日）
                 if stock_id in high_3m.columns:
                     h = high_3m[stock_id].dropna()
-                    high_10d = h.iloc[-20:].max() if len(h) >= 20 else h.max()
+                    pre_highs = h[h.index < start_date]
+                    high_10d = pre_highs.iloc[-20:].max() if len(pre_highs) >= 20 else (pre_highs.max() if len(pre_highs) > 0 else h.max())
                 else:
-                    high_10d = prices.iloc[-20:].max() if len(prices) >= 20 else prices.max()
+                    pre_prices = prices[prices.index < start_date]
+                    high_10d = pre_prices.iloc[-20:].max() if len(pre_prices) >= 20 else (pre_prices.max() if len(pre_prices) > 0 else prices.max())
 
                 # 處置期間最低點（用盤中最低價）
                 low_day = None
@@ -801,7 +804,7 @@ def get_all_data():
                     "處置第幾天": f"第{today_idx}天",
                     "即時股價": round(hist_price, 2),
                     "昨收": round(hist_price, 2),
-                    "20日高點": round(high_10d, 2),
+                    "處置前高點": round(high_10d, 2),
                     "處置期間最低": low_display,
                     "10日均線": round(current_ma10, 2),
                     "20日均線": round(current_ma20, 2),
@@ -856,7 +859,7 @@ def get_all_data():
                         high_10d = round(max(hist_high, rt_price), 2)
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
-                        item["20日高點"] = high_10d
+                        item["處置前高點"] = high_10d
                         # 處置期間最低：即時更新當天最低（保留原有格式不變）
                         pass  # 處置期間最低已在初始計算時設定，即時不重算
                         item["_below_ma10"] = rt_price < new_ma10
@@ -1041,7 +1044,7 @@ def strategy(sid):
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅"]},
         7: None,  # 懶載入，下方單獨處理
         14: {"title": "處置股", "icon": "📅", "desc": "目前正在被處置的股票，最快出關的在前",
-            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "20日高點", "處置期間最低", "10日均線", "20日均線"],
+            "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "處置前高點", "處置期間最低", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7b if x.get("_below_ma10")}},
     }
 
