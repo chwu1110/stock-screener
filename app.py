@@ -1216,6 +1216,20 @@ def check_and_notify_s14():
     except Exception as e:
         print(f"check_and_notify_s14 錯誤: {e}")
 
+
+@app.route("/test-telegram-s14")
+def test_telegram_s14():
+    try:
+        msg = ("\U0001F4A5 <b>Joe\u7684\u7d42\u6975\u5fc5\u6bba\u6280</b>\n\n"
+               + "\U0001F4C9 <b>1234 \u6e2c\u8a66\u80a1</b>\n"
+               + "\u5373\u6642\u50f9: 80.0 | \u8655\u7f6e\u524d\u9ad8\u9ede: 100.0\n"
+               + "\u8dcc\u5e45: -20.0% (\u5df2\u8dcc\u7834\u9ad8\u9ede8\u6210)\n"
+               + "10\u65e5\u7dda: 85.0 | 20\u65e5\u7dda: 90.0")
+        send_telegram(msg)
+        return "Telegram \u6e2c\u8a66\u901a\u77e5\u5df2\u767c\u9001\uff01", 200
+    except Exception as e:
+        return f"\u5931\u6557: {e}", 500
+
 # 啟動排程器：每天 14:30 自動更新處置股資料
 scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 scheduler.add_job(update_disposal_history, "cron", hour=14, minute=30)
