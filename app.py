@@ -952,35 +952,28 @@ def get_s7_data():
         if not disposal_stocks_2m or close_3m is None:
             return s7
 
-        # 取得目前仍在處置中的股票代號（從 disposal_today）
-        try:
-            today_str = date.today().strftime("%Y-%m-%d")
-            disposal_history = _global_disposal_history if hasattr(get_s7_data, "_dummy") else {}
-            # 用 parse_period 判斷是否還在處置期間
-            today_ts = pd.Timestamp(date.today())
-            currently_disposed = set()
-            for sid, info2 in disposal_stocks_2m.items():
+        # 取得目前仍在處置中的股票代號
+        today_ts = pd.Timestamp(date.today())
+        currently_disposed = set()
+        for sid, info2 in disposal_stocks_2m.items():
+            try:
                 period_raw = info2.get("period", "")
                 if not period_raw:
                     continue
                 period_raw2 = period_raw.replace(" ", "").replace("～", "~")
                 parts = period_raw2.split("~")
-                if len(parts) == 2:
-                    try:
-                        def _to_ts(s):
-                            s = s.strip().replace("-", "/")
-                            p = s.split("/")
-                            if len(p) == 3:
-                                y = int(p[0]) + (1911 if len(p[0]) == 3 else 0)
-                                return pd.Timestamp(y, int(p[1]), int(p[2]))
-                            return None
-                        end_ts = _to_ts(parts[1])
-                        if end_ts and end_ts >= today_ts:
-                            currently_disposed.add(sid)
-                    except:
-                        pass
-        except:
-            currently_disposed = set()
+                if len(parts) != 2:
+                    continue
+                end_str = parts[1].strip().replace("-", "/")
+                ep = end_str.split("/")
+                if len(ep) != 3:
+                    continue
+                ey = int(ep[0]) + (1911 if len(ep[0]) == 3 else 0)
+                end_ts = pd.Timestamp(ey, int(ep[1]), int(ep[2]))
+                if end_ts >= today_ts:
+                    currently_disposed.add(sid)
+            except:
+                pass
 
         for stock_id, info in disposal_stocks_2m.items():
             # 排除目前仍在處置中的股票
