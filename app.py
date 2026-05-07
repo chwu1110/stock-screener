@@ -68,7 +68,7 @@ def _fetch_disposal_otc():
                     try:
                         sid    = str(row.get("SecuritiesCompanyCode", "")).strip()
                         name   = str(row.get("CompanyName", "")).strip()
-                        dp = str(row.get("DispositionPeriod", row.get("DisposalPeriod", ""))).strip()
+                        dp     = str(row.get("DisposalPeriod", "")).strip()
                         def roc_yyyymmdd_to_ad(s):
                             s = s.strip()
                             if len(s) == 7:
@@ -235,8 +235,8 @@ HOME_TEMPLATE = """
         </a>
         <a href="/strategy/7" class="card">
             <div class="card-icon">⚠️</div>
-            <div class="card-title">前任處置股</div>
-            <div class="card-desc">兩個月內曾被處置但已出關的股票，即時股價 vs 兩個月高點、10日線、20日線</div>
+            <div class="card-title">近兩個月處置股</div>
+            <div class="card-desc">近兩個月曾被處置的股票，即時股價 vs 兩個月高點、10日線、20日線</div>
             <div class="card-count">{{ counts[5] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
@@ -880,9 +880,15 @@ def get_all_data():
                             prices_with_today.iloc[-1] = rt_price
                         new_ma10 = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
                         new_ma20 = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
-                        # 處置前高點不需要即時重算，保留初始計算的值
+                        if sid in high_3m.columns:
+                            h = high_3m[sid].dropna()
+                            hist_high = h.iloc[-20:].max() if len(h) >= 20 else h.max()
+                        else:
+                            hist_high = prices_with_today.iloc[-20:].max()
+                        high_10d = round(max(hist_high, rt_price), 2)
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
+                        item["處置前高點"] = high_10d
                         # 處置期間最低：即時更新當天最低（保留原有格式不變）
                         pass  # 處置期間最低已在初始計算時設定，即時不重算
                         item["_below_ma10"] = rt_price < new_ma10
@@ -938,7 +944,7 @@ def home():
 _s7_cache = {"data": None, "time": None}
 
 def get_s7_data():
-    """懶載入策略七：前任處置股（兩個月內曾被處置，但目前已出關）"""
+    """懶載入策略七：近兩個月處置股"""
     now = datetime.now()
     if _s7_cache["data"] is not None and (now - _s7_cache["time"]).total_seconds() < 1800:
         return _s7_cache["data"]
@@ -952,33 +958,7 @@ def get_s7_data():
         if not disposal_stocks_2m or close_3m is None:
             return s7
 
-        # 取得目前仍在處置中的股票代號
-        today_ts = pd.Timestamp(date.today())
-        currently_disposed = set()
-        for sid, info2 in disposal_stocks_2m.items():
-            try:
-                period_raw = info2.get("period", "")
-                if not period_raw:
-                    continue
-                period_raw2 = period_raw.replace(" ", "").replace("～", "~")
-                parts = period_raw2.split("~")
-                if len(parts) != 2:
-                    continue
-                end_str = parts[1].strip().replace("-", "/")
-                ep = end_str.split("/")
-                if len(ep) != 3:
-                    continue
-                ey = int(ep[0]) + (1911 if len(ep[0]) == 3 else 0)
-                end_ts = pd.Timestamp(ey, int(ep[1]), int(ep[2]))
-                if end_ts >= today_ts:
-                    currently_disposed.add(sid)
-            except:
-                pass
-
         for stock_id, info in disposal_stocks_2m.items():
-            # 排除目前仍在處置中的股票
-            if stock_id in currently_disposed:
-                continue
             try:
                 if stock_id not in close_3m.columns:
                     continue
@@ -1009,11 +989,7 @@ def get_s7_data():
                 period_raw = info.get("period", "")
                 try:
                     import re as _re
-                    # 只轉換民國年（3位數開頭），不轉換西元年（4位數開頭）
-                    if _re.match(r'^\d{3}/', period_raw) or '～' in period_raw and _re.match(r'^\d{3}/', period_raw):
-                        period_ad = _re.sub(r'(?<!\d)(\d{3})(?=/)', lambda m: str(int(m.group(1))+1911), period_raw)
-                    else:
-                        period_ad = period_raw
+                    period_ad = _re.sub(r'(\d{3})/', lambda m: str(int(m.group(1))+1911)+'/', period_raw)
                 except:
                     period_ad = period_raw
 
@@ -1107,8 +1083,8 @@ def strategy(sid):
     if sid == 7:
         s7_lazy = get_s7_data()
         s = {
-            "title": "前任處置股", "icon": "🎭",
-            "desc": "兩個月內曾被處置但已出關的股票，顯示即時股價、兩個月高點、10日線、20日線，紅底為跌破10日線",
+            "title": "近兩個月處置股", "icon": "⚠️",
+            "desc": "近兩個月曾被處置的股票，顯示即時股價、兩個月高點、10日線、20日線，紅底為跌破10日線",
             "stocks": s7_lazy,
             "columns": ["股票代號", "股票名稱", "處置期間", "即時股價", "昨收", "2月高點", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7_lazy if x.get("_below_ma10")},
@@ -1130,7 +1106,6 @@ def send_telegram(msg):
         print(f"Telegram 發送失敗: {e}")
 
 _notified_today = {}  # {股票代號: 日期} 防止重複通知
-_notified_s14 = {}   # {股票代號: 日期} 策略14處置前高點拉回兩成通知
 
 def check_and_notify_s7():
     """每5分鐘檢查策略7：即時股價 <= 2月高點 * 0.82 就發 Telegram（每天每檔只通知一次）"""
@@ -1170,84 +1145,12 @@ def check_and_notify_s7():
     except Exception as e:
         print(f"check_and_notify_s7 錯誤: {e}")
 
-def check_and_notify_s14():
-    """每5分鐘檢查策略14：即時股價 <= 處置前高點 * 0.8 就發 Telegram（每天每檔只通知一次）"""
-    global _notified_s14
-    today_str = date.today().strftime("%Y-%m-%d")
-    _notified_s14 = {k: v for k, v in _notified_s14.items() if v == today_str}
-
-    now = datetime.now()
-    if not (9 <= now.hour < 13 or (now.hour == 13 and now.minute <= 35)):
-        return
-
-    try:
-        from flask import current_app
-        with current_app.app_context():
-            pass
-    except:
-        pass
-
-    try:
-        s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14 = get_cached_data()
-        if not s14:
-            return
-
-        # 抓即時股價
-        twse_ids = [f"tse_{s['股票代號']}.tw" for s in s14]
-        otc_ids  = [f"otc_{s['股票代號']}.tw" for s in s14]
-        rt_prices = {}
-        try:
-            ids_str = "|".join(twse_ids + otc_ids)
-            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, verify=False)
-            for item in resp.json().get("msgArray", []):
-                sid = item.get("c", "")
-                z = item.get("z", "-")
-                if z and z != "-":
-                    rt_prices[sid] = float(z)
-        except:
-            pass
-
-        alerts = []
-        for stock in s14:
-            sid = stock["股票代號"]
-            if _notified_s14.get(sid) == today_str:
-                continue
-            rt_price = rt_prices.get(sid, 0)
-            if rt_price == 0:
-                rt_price = stock.get("即時股價", 0) or stock.get("昨收", 0)
-            pre_high = stock.get("處置前高點", 0)
-            if not pre_high or pre_high <= 0 or rt_price <= 0:
-                continue
-            threshold = pre_high * 0.8
-            if rt_price <= threshold:
-                drop_pct = (rt_price - pre_high) / pre_high * 100
-                name = stock["股票名稱"]
-                ma10 = stock.get("10日均線", "-")
-                ma20 = stock.get("20日均線", "-")
-                line = ("\U0001F4C9 <b>" + sid + " " + name + "</b>\n"
-                        + "\u5373\u6642\u50f9: " + str(rt_price) + " | \u8655\u7f6e\u524d\u9ad8\u9ede: " + str(pre_high) + "\n"
-                        + "\u8dcc\u5e45: " + str(round(drop_pct, 1)) + "% (\u5df2\u8dcc\u7834\u9ad8\u9ede8\u6210)\n"
-                        + "10\u65e5\u7dda: " + str(ma10) + " | 20\u65e5\u7dda: " + str(ma20))
-                alerts.append(line)
-                _notified_s14[sid] = today_str
-
-        if alerts:
-            msg = "\U0001F4A5 <b>Joe\u7684\u7d42\u6975\u5fc5\u6bba\u6280</b>\n\n" + "\n\n".join(alerts)
-
-            send_telegram(msg)
-            print(f"[Telegram s14] 發送 {len(alerts)} 筆警示")
-    except Exception as e:
-        print(f"check_and_notify_s14 錯誤: {e}")
-
-
 # 啟動排程器：每天 14:30 自動更新處置股資料
 scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 scheduler.add_job(update_disposal_history, "cron", hour=14, minute=30)
 scheduler.add_job(refresh_disposal_from_github, "cron", hour=14, minute=35)  # 本機push後Railway自動同步
 scheduler.add_job(lambda: (_cache.update({"data": None, "time": None}), _s7_cache.update({"data": None, "time": None})), "cron", hour=15, minute=0)
 scheduler.add_job(check_and_notify_s7, "interval", minutes=5)  # 每5分鐘檢查一次
-scheduler.add_job(check_and_notify_s14, "interval", minutes=5)  # 每5分鐘檢查處置前高點拉回兩成
 scheduler.start()
 
 # 啟動時立刻從 GitHub 載入最新處置股資料
