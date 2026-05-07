@@ -880,15 +880,9 @@ def get_all_data():
                             prices_with_today.iloc[-1] = rt_price
                         new_ma10 = round(prices_with_today.rolling(10).mean().iloc[-1], 2)
                         new_ma20 = round(prices_with_today.rolling(20).mean().iloc[-1], 2)
-                        if sid in high_3m.columns:
-                            h = high_3m[sid].dropna()
-                            hist_high = h.iloc[-20:].max() if len(h) >= 20 else h.max()
-                        else:
-                            hist_high = prices_with_today.iloc[-20:].max()
-                        high_10d = round(max(hist_high, rt_price), 2)
+                        # 處置前高點不需要即時重算，保留初始計算的值
                         item["10日均線"] = new_ma10
                         item["20日均線"] = new_ma20
-                        item["處置前高點"] = high_10d
                         # 處置期間最低：即時更新當天最低（保留原有格式不變）
                         pass  # 處置期間最低已在初始計算時設定，即時不重算
                         item["_below_ma10"] = rt_price < new_ma10
