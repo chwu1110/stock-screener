@@ -68,7 +68,7 @@ def _fetch_disposal_otc():
                     try:
                         sid    = str(row.get("SecuritiesCompanyCode", "")).strip()
                         name   = str(row.get("CompanyName", "")).strip()
-                        dp     = str(row.get("DisposalPeriod", "")).strip()
+                        dp = str(row.get("DispositionPeriod", row.get("DisposalPeriod", ""))).strip()
                         def roc_yyyymmdd_to_ad(s):
                             s = s.strip()
                             if len(s) == 7:
@@ -983,7 +983,11 @@ def get_s7_data():
                 period_raw = info.get("period", "")
                 try:
                     import re as _re
-                    period_ad = _re.sub(r'(\d{3})/', lambda m: str(int(m.group(1))+1911)+'/', period_raw)
+                    # 只轉換民國年（3位數開頭），不轉換西元年（4位數開頭）
+                    if _re.match(r'^\d{3}/', period_raw) or '～' in period_raw and _re.match(r'^\d{3}/', period_raw):
+                        period_ad = _re.sub(r'(?<!\d)(\d{3})(?=/)', lambda m: str(int(m.group(1))+1911), period_raw)
+                    else:
+                        period_ad = period_raw
                 except:
                     period_ad = period_raw
 
