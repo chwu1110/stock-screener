@@ -113,18 +113,16 @@ def fetch_otc():
                         sid    = str(row.get("SecuritiesCompanyCode", "")).strip()
                         name   = str(row.get("CompanyName", "")).strip()
                         # DisposalPeriod 格式: "1150429~1150513" (民國年YYYMMDD)
-                        dp     = str(row.get("DisposalPeriod", "")).strip()
-                        def roc_yyyymmdd_to_ad(s):
-                            s = s.strip()
-                            if len(s) == 7:  # YYYMMDD 民國年
+                        dp = str(row.get("DispositionPeriod", "")).strip()
+                        def roc_to_ad(s):
+                            s = s.strip().replace("/", "").replace("-", "")
+                            if len(s) == 7:  # YYYMMDD
                                 y = int(s[:3]) + 1911
-                                m = s[3:5]
-                                d = s[5:7]
-                                return f"{y}/{m}/{d}"
+                                return f"{y}/{s[3:5]}/{s[5:7]}"
                             return s
                         if "~" in dp:
                             parts = dp.split("~")
-                            period = f"{roc_yyyymmdd_to_ad(parts[0])}~{roc_yyyymmdd_to_ad(parts[1])}"
+                            period = f"{roc_to_ad(parts[0])}～{roc_to_ad(parts[1])}"
                         else:
                             period = dp
                         is_20min = "20分鐘" in str(row.get("DisposalCondition", ""))
