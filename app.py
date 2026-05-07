@@ -755,8 +755,22 @@ def get_all_data():
                 period_raw  = info.get("period", "")
                 start_date, end_date_ts, date_period_ad = parse_period(period_raw)
                 if start_date is None or end_date_ts is None:
-                    print(f"  {stock_id} 日期格式錯誤: {repr(period_raw)}")
-                    continue
+                    # 嘗試從 stockwarden 補充日期
+                    sw_stock = sw_data_shared.get(stock_id, {})
+                    if sw_stock:
+                        sorted_dates = sorted(sw_stock.keys(), reverse=True)
+                        for ann_date in sorted_dates:
+                            item = sw_stock[ann_date]
+                            k = str(item.get("k", ""))
+                            f_date = str(item.get("f", ""))
+                            if k and f_date:
+                                start_date, end_date_ts, date_period_ad = parse_period(f"{k}～{f_date}")
+                                if start_date and end_date_ts:
+                                    stock_name = str(item.get("h", stock_name))
+                                    break
+                    if start_date is None or end_date_ts is None:
+                        print(f"  {stock_id} 日期格式錯誤: {repr(period_raw)}")
+                        continue
                 end_date_str = end_date_ts.strftime("%Y/%m/%d")
 
                 # 過濾已出關的股票（出關日早於今天才過濾）
