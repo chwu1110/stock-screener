@@ -235,8 +235,8 @@ HOME_TEMPLATE = """
         </a>
         <a href="/strategy/7" class="card">
             <div class="card-icon">⚠️</div>
-            <div class="card-title">近兩個月處置股</div>
-            <div class="card-desc">近兩個月曾被處置的股票，即時股價 vs 兩個月高點、10日線、20日線</div>
+            <div class="card-title">前任處置股</div>
+            <div class="card-desc">兩個月內曾被處置但已出關的股票，即時股價 vs 兩個月高點、10日線、20日線</div>
             <div class="card-count">{{ counts[5] }}</div>
             <div class="card-count-label">符合股票數</div>
         </a>
@@ -938,7 +938,7 @@ def home():
 _s7_cache = {"data": None, "time": None}
 
 def get_s7_data():
-    """懶載入策略七：近兩個月處置股"""
+    """懶載入策略七：前任處置股（兩個月內曾被處置，但目前已出關）"""
     now = datetime.now()
     if _s7_cache["data"] is not None and (now - _s7_cache["time"]).total_seconds() < 1800:
         return _s7_cache["data"]
@@ -952,7 +952,40 @@ def get_s7_data():
         if not disposal_stocks_2m or close_3m is None:
             return s7
 
+        # 取得目前仍在處置中的股票代號（從 disposal_today）
+        try:
+            today_str = date.today().strftime("%Y-%m-%d")
+            disposal_history = _global_disposal_history if hasattr(get_s7_data, "_dummy") else {}
+            # 用 parse_period 判斷是否還在處置期間
+            today_ts = pd.Timestamp(date.today())
+            currently_disposed = set()
+            for sid, info2 in disposal_stocks_2m.items():
+                period_raw = info2.get("period", "")
+                if not period_raw:
+                    continue
+                period_raw2 = period_raw.replace(" ", "").replace("～", "~")
+                parts = period_raw2.split("~")
+                if len(parts) == 2:
+                    try:
+                        def _to_ts(s):
+                            s = s.strip().replace("-", "/")
+                            p = s.split("/")
+                            if len(p) == 3:
+                                y = int(p[0]) + (1911 if len(p[0]) == 3 else 0)
+                                return pd.Timestamp(y, int(p[1]), int(p[2]))
+                            return None
+                        end_ts = _to_ts(parts[1])
+                        if end_ts and end_ts >= today_ts:
+                            currently_disposed.add(sid)
+                    except:
+                        pass
+        except:
+            currently_disposed = set()
+
         for stock_id, info in disposal_stocks_2m.items():
+            # 排除目前仍在處置中的股票
+            if stock_id in currently_disposed:
+                continue
             try:
                 if stock_id not in close_3m.columns:
                     continue
@@ -1081,8 +1114,8 @@ def strategy(sid):
     if sid == 7:
         s7_lazy = get_s7_data()
         s = {
-            "title": "近兩個月處置股", "icon": "⚠️",
-            "desc": "近兩個月曾被處置的股票，顯示即時股價、兩個月高點、10日線、20日線，紅底為跌破10日線",
+            "title": "前任處置股", "icon": "🎭",
+            "desc": "兩個月內曾被處置但已出關的股票，顯示即時股價、兩個月高點、10日線、20日線，紅底為跌破10日線",
             "stocks": s7_lazy,
             "columns": ["股票代號", "股票名稱", "處置期間", "即時股價", "昨收", "2月高點", "10日均線", "20日均線"],
             "below_ma10_ids": {x["股票代號"] for x in s7_lazy if x.get("_below_ma10")},
