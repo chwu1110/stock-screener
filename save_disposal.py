@@ -198,6 +198,29 @@ def main():
         print("No data fetched, aborting")
         return
 
+    # 過濾已出關的股票
+    today_date = date.today()
+    def parse_end_date(period):
+        try:
+            period = period.replace("～", "~").replace(" ", "")
+            end = period.split("~")[1].strip()
+            parts = end.replace("-", "/").split("/")
+            if len(parts) == 3:
+                y = int(parts[0])
+                if y < 1911: y += 1911
+                return date(y, int(parts[1]), int(parts[2]))
+        except:
+            pass
+        return None
+
+    filtered = {}
+    for sid, info in stocks.items():
+        end_date = parse_end_date(info.get("period", ""))
+        if end_date is None or end_date >= today_date:
+            filtered[sid] = info
+    print(f"過濾已出關後: {len(filtered)} 筆（移除 {len(stocks)-len(filtered)} 筆）")
+    stocks = filtered
+
     history[today_str] = stocks
     print(f"Today total: {len(stocks)} disposal stocks (TWSE:{len(twse_stocks)} OTC:{len(otc_stocks)})")
 
