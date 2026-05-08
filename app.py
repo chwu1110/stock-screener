@@ -569,9 +569,14 @@ def get_all_data():
     open_2026 = open_df[open_df.index >= pd.to_datetime(start_2026)]
     open_1m = open_df[open_df.index >= pd.to_datetime(start_1m)]
 
-    low_ = data.get("price:最低價")
-    low_df = pd.DataFrame(low_.values, index=pd.to_datetime(low_.index.astype(str)), columns=low_.columns)
-    low_1m = low_df[low_df.index >= pd.to_datetime(start_1m)]
+    try:
+        low_ = data.get("price:最低價")
+        low_df = pd.DataFrame(low_.values, index=pd.to_datetime(low_.index.astype(str)), columns=low_.columns)
+        low_1m = low_df[low_df.index >= pd.to_datetime(start_1m)]
+        print("Daily usage: -- price:最低價 載入完成")
+    except Exception as e:
+        print(f"price:最低價 載入失敗，改用開盤價判斷: {e}")
+        low_1m = None
 
     def gap_stars(stock, dates):
         """判斷是否為跳空漲停（一價到底）：開盤＝漲停價 且 最低＝漲停價"""
@@ -583,14 +588,16 @@ def get_all_data():
                     continue
                 prev_c = close_1m[stock].iloc[idx - 1]
                 open_p = open_1m[stock].loc[d] if d in open_1m.index else None
-                low_p  = low_1m[stock].loc[d]  if d in low_1m.index  else None
-                if (pd.notna(prev_c) and prev_c > 0
-                        and open_p is not None and pd.notna(open_p)
-                        and low_p  is not None and pd.notna(low_p)):
+                if pd.notna(prev_c) and prev_c > 0 and open_p is not None and pd.notna(open_p):
                     limit_up = round(prev_c * 1.1, 2)
-                    # 一價到底：開盤 ≈ 漲停價 且 最低 ≈ 漲停價
-                    if abs(open_p - limit_up) < 0.02 and abs(low_p - limit_up) < 0.02:
-                        stars += 1
+                    if abs(open_p - limit_up) < 0.02:
+                        # 有最低價資料就用一價到底判斷，沒有就只用開盤判斷
+                        if low_1m is not None and d in low_1m.index:
+                            low_p = low_1m[stock].loc[d]
+                            if pd.notna(low_p) and abs(low_p - limit_up) < 0.02:
+                                stars += 1
+                        else:
+                            stars += 1
             except:
                 pass
         return "★" * stars if stars > 0 else ""
@@ -1008,13 +1015,40 @@ def get_all_data():
 _cache = {"data": None, "time": None}
 _global_disposal_2m = {}
 _global_close_3m = None
+_cache_lock = __import__("threading").Lock()
+_cache_loading = False
+
+def _refresh_cache():
+    """背景執行緒：下載資料並更新快取"""
+    global _cache_loading
+    try:
+        _cache_loading = True
+        print("背景快取：開始更新資料...")
+        new_data = get_all_data()
+        with _cache_lock:
+            _cache["data"] = new_data
+            _cache["time"] = datetime.now()
+        print("背景快取：更新完成")
+    except Exception as e:
+        print(f"背景快取更新失敗: {e}")
+    finally:
+        _cache_loading = False
+
+def _schedule_refresh():
+    """定時每30分鐘更新一次"""
+    import threading
+    _refresh_cache()
+    t = threading.Timer(1800, _schedule_refresh)
+    t.daemon = True
+    t.start()
 
 def get_cached_data():
-    now = datetime.now()
-    if _cache["data"] is None or (now - _cache["time"]).seconds > 1800:
-        _cache["data"] = get_all_data()
-        _cache["time"] = now
-    return _cache["data"]
+    with _cache_lock:
+        data = _cache["data"]
+    if data is None:
+        # 資料還沒準備好，回傳空的
+        return [], [], [], [], [], [], [], [], [], [], [], [], []
+    return data
 
 @app.route("/strategy/12/realtime")
 def strategy12_realtime():
@@ -1076,6 +1110,8 @@ def strategy12_realtime():
 def home():
     s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+    if all(len(x) == 0 for x in [s1, s2, s3, s4, s5, s6, s7, s10, s12, s13]) and _cache_loading:
+        return "<html><body style='background:#0f172a;color:#e2e8f0;font-family:Microsoft JhengHei;padding:60px;text-align:center'><h2>⏳ 資料載入中，請稍候1~2分鐘後重新整理...</h2></body></html>"
     return render_template_string(HOME_TEMPLATE, counts=[len(s1), len(s2), len(s3), len(s4), len(s5), len(s6), len(s7), 0, 0, len(s10), 0, len(s12), len(s13)], update_time=update_time)
 
 @app.route("/strategy/<int:sid>")
@@ -1145,7 +1181,7 @@ STRATEGY13_TEMPLATE = """
         .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 20px; }
         .disposal-start-line { color: #f87171; font-size: 12px; margin-top: 6px; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 </head>
 <body>
     <a class="back" href="/">← 返回首頁</a>
@@ -1226,12 +1262,13 @@ STRATEGY13_TEMPLATE = """
 def strategy13():
     s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13 = get_cached_data()
     update_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    close_3m = _global_close_3m
 
     # 為每支股票準備走勢圖資料（處置前5天 + 處置期間）
     for s in s13:
         try:
             stock_id = s["股票代號"]
-            if stock_id not in close_3m.columns:
+            if close_3m is None or stock_id not in close_3m.columns:
                 s["chart_data"] = None
                 continue
 
@@ -1277,6 +1314,11 @@ def strategy13():
             s["chart_data"] = None
 
     return render_template_string(STRATEGY13_TEMPLATE, stocks=s13, update_time=update_time)
+
+# 啟動時在背景開始下載資料（gunicorn 也會執行這段）
+import threading as _threading
+_bg_thread = _threading.Thread(target=_schedule_refresh, daemon=True)
+_bg_thread.start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
