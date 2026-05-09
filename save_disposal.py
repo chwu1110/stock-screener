@@ -32,6 +32,54 @@ def save_history(history):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
 
+def fetch_stockwarden():
+    """從 stockwarden API 抓取完整處置股清單（最準確）"""
+    url = "https://storage.googleapis.com/stockwarden-prod-public/api/boards.json"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    stocks = {}
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code != 200:
+            print(f"  Stockwarden API 回應異常: {resp.status_code}")
+            return stocks
+        data = resp.json()
+        rod_list = data.get("data", {}).get("rod_list", [])
+        for item in rod_list:
+            try:
+                sid  = str(item.get("v", "")).strip()
+                name = str(item.get("bl", "")).strip()
+                ak   = item.get("ak", {})
+                if not ak:
+                    continue
+                ca = str(ak.get("ca", "")).strip()  # 開始日 民國年 YYY/MM/DD
+                am = str(ak.get("am", "")).strip()  # 結束日 民國年 YYY/MM/DD
+                bf = ak.get("bf", 5)  # 分鐘數
+
+                def roc_to_ad(s):
+                    s = s.replace("/", "").strip()
+                    if len(s) == 7:
+                        y = int(s[:3]) + 1911
+                        return f"{y}/{s[3:5]}/{s[5:7]}"
+                    return s
+
+                period = f"{roc_to_ad(ca)}~{roc_to_ad(am)}" if ca and am else ""
+                is_20min = bf == 20
+                market = "上市" if len(sid) == 4 and sid.isdigit() else "上櫃"
+
+                if sid and sid not in stocks:
+                    stocks[sid] = {
+                        "name": name,
+                        "period": period,
+                        "is_20min": is_20min,
+                        "market": market
+                    }
+            except:
+                continue
+        print(f"  Stockwarden: {len(stocks)} stocks")
+    except Exception as e:
+        print(f"  Stockwarden API 失敗: {e}")
+    return stocks
+
 def fetch_twse():
     urls = [
         "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
@@ -187,42 +235,48 @@ def main():
 
     history = load_history()
 
-    print("Fetching TWSE...")
-    twse_stocks = fetch_twse()
-    print("Fetching OTC...")
-    otc_stocks = fetch_otc()
+    print("Fetching Stockwarden...")
+    stocks = fetch_stockwarden()
 
-    stocks = {**twse_stocks, **otc_stocks}
+    if not stocks:
+        print("Stockwarden 失敗，改用 TWSE+OTC...")
+        print("Fetching TWSE...")
+        twse_stocks = fetch_twse()
+        print("Fetching OTC...")
+        otc_stocks = fetch_otc()
+        stocks = {**twse_stocks, **otc_stocks}
 
     if not stocks:
         print("No data fetched, aborting")
         return
 
-    # 過濾已出關的股票
+
+
+    # 只保留今天已開始處置的股票（開始日 <= 今天）
     today_date = date.today()
-    def parse_end_date(period):
+    def get_start_date(period):
         try:
             period = period.replace("～", "~").replace(" ", "")
-            end = period.split("~")[1].strip()
-            parts = end.replace("-", "/").split("/")
-            if len(parts) == 3:
-                y = int(parts[0])
+            start = period.split("~")[0].strip()
+            p = start.replace("-", "/").split("/")
+            if len(p) == 3:
+                y = int(p[0])
                 if y < 1911: y += 1911
-                return date(y, int(parts[1]), int(parts[2]))
+                return date(y, int(p[1]), int(p[2]))
         except:
             pass
         return None
 
     filtered = {}
     for sid, info in stocks.items():
-        end_date = parse_end_date(info.get("period", ""))
-        if end_date is None or end_date >= today_date:
+        start_date = get_start_date(info.get("period", ""))
+        if start_date is None or start_date <= today_date:
             filtered[sid] = info
-    print(f"過濾已出關後: {len(filtered)} 筆（移除 {len(stocks)-len(filtered)} 筆）")
+    print(f"今日已開始處置: {len(filtered)} 筆（移除未開始 {len(stocks)-len(filtered)} 筆）")
     stocks = filtered
 
     history[today_str] = stocks
-    print(f"Today total: {len(stocks)} disposal stocks (TWSE:{len(twse_stocks)} OTC:{len(otc_stocks)})")
+    print(f"Today total: {len(stocks)} disposal stocks")
 
     cutoff = (date.today() - timedelta(days=65)).strftime("%Y-%m-%d")
     history = {d: v for d, v in history.items() if d >= cutoff}
