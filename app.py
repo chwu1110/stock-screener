@@ -777,14 +777,26 @@ def get_all_data():
                 if end_date_ts < pd.Timestamp(today.date()):
                     continue
 
-                if stock_id not in close_3m.columns:
-                    if stock_id in ["7711", "1591"]:
-                        print(f"  [{stock_id}] 不在 close_3m")
+                if stock_id not in close_3m.columns or len(close_3m[stock_id].dropna()) < 5:
+                    print(f"  {stock_id} 不在close_3m或資料不足，僅顯示基本資訊")
+                    s7b.append({
+                        "股票代號": stock_id,
+                        "股票名稱": stock_name,
+                        "處置期間": date_period_ad,
+                        "出關日": end_date_str,
+                        "處置第幾天": "-",
+                        "即時股價": "-",
+                        "昨收": "-",
+                        "處置前高點": "-",
+                        "處置期間最低": "-",
+                        "10日均線": "-",
+                        "20日均線": "-",
+                        "_below_ma10": False,
+                        "_end_date": end_date_ts,
+                        "_stock_id": stock_id,
+                    })
                     continue
                 prices = close_3m[stock_id].dropna()
-                if len(prices) < 5:
-                    print(f"  跳過 {stock_id}：資料不足5筆({len(prices)}筆)")
-                    continue
 
                 trading_days = prices.index[prices.index >= start_date]
                 today_ts = pd.Timestamp(today)
