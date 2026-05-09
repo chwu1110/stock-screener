@@ -1067,6 +1067,12 @@ def get_s7_data():
     _s7_cache["time"] = now
     return s7
 
+@app.route("/clear_cache")
+def clear_cache():
+    _cache.update({"data": None, "time": None})
+    _s7_cache.update({"data": None, "time": None})
+    return "Cache cleared!", 200
+
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
     s1, s2, s3, s4, s5, s6, s7, s7b = get_cached_data()
