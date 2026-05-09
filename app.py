@@ -782,8 +782,8 @@ def get_all_data():
                         print(f"  [{stock_id}] 不在 close_3m")
                     continue
                 prices = close_3m[stock_id].dropna()
-                if len(prices) < 20:
-                    print(f"  跳過 {stock_id}：資料不足20筆({len(prices)}筆)")
+                if len(prices) < 5:
+                    print(f"  跳過 {stock_id}：資料不足5筆({len(prices)}筆)")
                     continue
 
                 trading_days = prices.index[prices.index >= start_date]
