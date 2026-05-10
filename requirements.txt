@@ -1,5 +1,8 @@
-finlab
 flask
+finlab==2.0.2
 pandas
-gunicorn
 requests
+urllib3
+apscheduler
+gunicorn
+pytz
