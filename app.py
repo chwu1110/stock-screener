@@ -559,6 +559,7 @@ def get_all_data():
             prev_date = is_limit_up.index[prev_idx]
             s1.append({
                 "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                "產業別": industry_dict.get(stock, ""),
                 "第一天漲停日": str(prev_date)[:10], "第二天漲停日": str(date)[:10],
                 "第一天收盤": round(close_1m[stock].loc[prev_date], 2),
                 "第二天收盤": round(close_1m[stock].loc[date], 2),
@@ -621,6 +622,7 @@ def get_all_data():
             if stock not in s4_dict or gain > float(s4_dict[stock]["三日累積漲幅"].replace("%","")):
                 s4_dict[stock] = {
                     "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "產業別": industry_dict.get(stock, ""),
                     "觸發條件": cond,
                     "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10],
                     "第一天收盤": round(close_1m[stock].loc[d1], 2),
@@ -652,6 +654,7 @@ def get_all_data():
             if stock not in s5_dict or gain > float(s5_dict[stock]["四日累積漲幅"].replace("%","")):
                 s5_dict[stock] = {
                     "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "產業別": industry_dict.get(stock, ""),
                     "觸發條件": cond,
                     "第一天": str(d1)[:10], "第二天": str(d2)[:10], "第三天": str(d3)[:10], "第四天": str(d4)[:10],
                     "第一天收盤": round(close_1m[stock].loc[d1], 2),
@@ -684,6 +687,7 @@ def get_all_data():
                 d5 = series.index[idx]
                 s6_dict[stock] = {
                     "股票代號": stock, "股票名稱": name_dict.get(stock, ""),
+                    "產業別": industry_dict.get(stock, ""),
                     "第一天": str(d1)[:10], "第五天": str(d5)[:10],
                     "第一天收盤": round(close_1m[stock].loc[d1], 2),
                     "第五天收盤": round(close_1m[stock].loc[d5], 2),
@@ -1066,15 +1070,15 @@ def strategy(sid):
 
     strategies = {
         1: {"title": "二手紅盤", "icon": "🔥", "desc": "最近一個月內，連續兩個交易日漲停的股票，依日期由新到舊排列",
-            "stocks": s1, "columns": ["股票代號", "股票名稱", "第一天漲停日", "第二天漲停日", "第一天收盤", "第二天收盤", "目前收盤價"]},
+            "stocks": s1, "columns": ["股票代號", "股票名稱", "產業別", "第一天漲停日", "第二天漲停日", "第一天收盤", "第二天收盤", "目前收盤價"]},
         3: {"title": "強勢股回檔", "icon": "📉", "desc": "最近3個月內任意5日漲幅≥30%，且目前從高點修正≥20%，修正最多的在前",
             "stocks": s3, "columns": ["股票代號", "股票名稱", "5日最大漲幅", "漲幅起始日", "漲幅結束日", "當時最高價", "目前股價", "從高點修正"]},
         4: {"title": "三手紅盤", "icon": "🀄", "desc": "最近一個月內，連續三天漲停 或 連續三天累積漲幅≥30%，依日期由新到舊排列",
-            "stocks": s4, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第一天收盤", "第二天收盤", "第三天收盤", "三日累積漲幅", "目前收盤價"]},
+            "stocks": s4, "columns": ["股票代號", "股票名稱", "產業別", "觸發條件", "第一天", "第二天", "第三天", "第一天收盤", "第二天收盤", "第三天收盤", "三日累積漲幅", "目前收盤價"]},
         5: {"title": "四手紅盤", "icon": "🎰", "desc": "最近一個月內，連續四天漲停 或 連續四天累積漲幅≥40%，依日期由新到舊排列",
-            "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅", "目前收盤價"]},
+            "stocks": s5, "columns": ["股票代號", "股票名稱", "產業別", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅", "目前收盤價"]},
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
-            "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅", "目前收盤價"]},
+            "stocks": s6, "columns": ["股票代號", "股票名稱", "產業別", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅", "目前收盤價"]},
         7: None,  # 懶載入，下方單獨處理
         14: {"title": "處置股", "icon": "📅", "desc": "目前正在被處置的股票，最快出關的在前",
             "stocks": s7b, "columns": ["股票代號", "股票名稱", "處置期間", "出關日", "處置第幾天", "即時股價", "昨收", "處置前高點", "處置期間最低", "10日均線", "20日均線"],
