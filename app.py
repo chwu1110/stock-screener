@@ -17,31 +17,6 @@ FINLAB_API_KEY = "LBmwu3n0/lor77y1Z0aBH/Q0WBI6+bLJrA2TlchZAM1jb6jJaURRbaQRZRWjoz
 # ── 處置股歷史（記憶體版，Railway 啟動時從 JSON 載入，之後每天自動更新）──
 _disposal_history = {}
 
-
-def is_valid_stock(sid):
-    """過濾掉權證、可轉債、ETF、特別股等非普通股"""
-    if not sid:
-        return False
-    # 權證：6碼純數字
-    if len(sid) == 6 and sid.isdigit():
-        return False
-    # 可轉債：數字+英文字母結尾（如 1234A、5678B）
-    if len(sid) == 5 and sid[:-1].isdigit() and sid[-1].isalpha():
-        return False
-    # ETF：00開頭
-    if sid.startswith("00") and len(sid) >= 5:
-        return False
-    # 特別股：數字+英文（如 2887A）
-    if sid[-1].isalpha():
-        return False
-    # 正常股票：4碼數字
-    if len(sid) == 4 and sid.isdigit():
-        return True
-    # 上櫃股票：4-5碼數字
-    if len(sid) <= 5 and sid.isdigit():
-        return True
-    return False
-
 def _fetch_disposal_twse():
     urls = [
         "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
@@ -509,7 +484,7 @@ def get_all_data():
     for date_str, stocks in disposal_history.items():
         if date_str >= two_months_ago:
             for sid, info in stocks.items():
-                if sid and is_valid_stock(sid) and sid not in disposal_stocks_2m:
+                if sid not in disposal_stocks_2m:
                     disposal_stocks_2m[sid] = info
     print(f"兩個月內處置股數: {len(disposal_stocks_2m)}, 含7721: {'7721' in disposal_stocks_2m}, 含6693: {'6693' in disposal_stocks_2m}")
 
@@ -587,6 +562,7 @@ def get_all_data():
                 "第一天漲停日": str(prev_date)[:10], "第二天漲停日": str(date)[:10],
                 "第一天收盤": round(close_1m[stock].loc[prev_date], 2),
                 "第二天收盤": round(close_1m[stock].loc[date], 2),
+                "目前收盤價": round(close_1m[stock].dropna().iloc[-1], 2),
             })
     s1.sort(key=lambda x: x["第二天漲停日"], reverse=True)
 
@@ -651,6 +627,7 @@ def get_all_data():
                     "第二天收盤": round(close_1m[stock].loc[d2], 2),
                     "第三天收盤": round(close_1m[stock].loc[d3], 2),
                     "三日累積漲幅": f"{gain*100:.1f}%",
+                    "目前收盤價": round(close_1m[stock].dropna().iloc[-1], 2),
                 }
 
     s4 = list(s4_dict.values())
@@ -680,6 +657,7 @@ def get_all_data():
                     "第一天收盤": round(close_1m[stock].loc[d1], 2),
                     "第四天收盤": round(close_1m[stock].loc[d4], 2),
                     "四日累積漲幅": f"{gain*100:.1f}%",
+                    "目前收盤價": round(close_1m[stock].dropna().iloc[-1], 2),
                 }
 
     s5 = list(s5_dict.values())
@@ -710,6 +688,7 @@ def get_all_data():
                     "第一天收盤": round(close_1m[stock].loc[d1], 2),
                     "第五天收盤": round(close_1m[stock].loc[d5], 2),
                     "五日累積漲幅": f"{gain*100:.1f}%",
+                    "目前收盤價": round(close_1m[stock].dropna().iloc[-1], 2),
                 }
 
     s6 = list(s6_dict.values())
@@ -732,39 +711,18 @@ def get_all_data():
         import re
         low_3m = _global_low_3m  # 盤中最低價
 
-        # 改用 FinLab disposal_information 取得目前處置股（上市+上櫃）
-        disposal_today = {}
-        try:
-            disposal_df_now = data.get("disposal_information")
-            today_ts = pd.Timestamp(date.today())
-            for _, row in disposal_df_now.iterrows():
-                try:
-                    sid   = str(row.get("stock_id", "")).strip()
-                    name  = str(row.get("證券名稱", "")).strip()
-                    start = str(row.get("處置開始時間", ""))[:10]
-                    end   = str(row.get("處置結束時間", ""))[:10]
-                    if not sid or not end or not is_valid_stock(sid):
-                        continue
-                    end_ts = pd.Timestamp(end)
-                    if end_ts < today_ts:
-                        continue
-                    period = f"{start}~{end}"
-                    if sid not in disposal_today:
-                        disposal_today[sid] = {"name": name, "period": period}
-                except:
-                    continue
-            print(f"FinLab 即時處置股：共{len(disposal_today)}檔（上市+上櫃，已過濾）")
-        except Exception as e:
-            print(f"FinLab disposal_information 失敗: {e}，改用歷史JSON")
-            today_str = date.today().strftime("%Y-%m-%d")
-            disposal_today = _disposal_history.get(today_str, {})
-            if not disposal_today:
-                for d_str in sorted(_disposal_history.keys(), reverse=True):
-                    disposal_today = _disposal_history[d_str]
-                    if disposal_today:
-                        print(f"處置股使用 {d_str} 的資料（共{len(disposal_today)}檔）")
-                        break
-            print(f"處置股資料來源：共{len(disposal_today)}檔")
+        # 取今天或最近一天的處置股資料（已包含上市+上櫃）
+        today_str = date.today().strftime("%Y-%m-%d")
+        disposal_today = _disposal_history.get(today_str, {})
+        if not disposal_today:
+            # 找最近一天
+            for d_str in sorted(_disposal_history.keys(), reverse=True):
+                disposal_today = _disposal_history[d_str]
+                if disposal_today:
+                    print(f"處置股使用 {d_str} 的資料（共{len(disposal_today)}檔）")
+                    break
+
+        print(f"處置股資料來源：共{len(disposal_today)}檔")
 
         def parse_period(period_str):
             """解析處置期間，支援民國年/西元年、/或-分隔，回傳 (start_ts, end_ts, period_ad)"""
@@ -1108,13 +1066,13 @@ def strategy(sid):
 
     strategies = {
         1: {"title": "二手紅盤", "icon": "🔥", "desc": "最近一個月內，連續兩個交易日漲停的股票，依日期由新到舊排列",
-            "stocks": s1, "columns": ["股票代號", "股票名稱", "第一天漲停日", "第二天漲停日", "第一天收盤", "第二天收盤"]},
+            "stocks": s1, "columns": ["股票代號", "股票名稱", "第一天漲停日", "第二天漲停日", "第一天收盤", "第二天收盤", "目前收盤價"]},
         3: {"title": "強勢股回檔", "icon": "📉", "desc": "最近3個月內任意5日漲幅≥30%，且目前從高點修正≥20%，修正最多的在前",
             "stocks": s3, "columns": ["股票代號", "股票名稱", "5日最大漲幅", "漲幅起始日", "漲幅結束日", "當時最高價", "目前股價", "從高點修正"]},
         4: {"title": "三手紅盤", "icon": "🀄", "desc": "最近一個月內，連續三天漲停 或 連續三天累積漲幅≥30%，依日期由新到舊排列",
-            "stocks": s4, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第一天收盤", "第二天收盤", "第三天收盤", "三日累積漲幅"]},
+            "stocks": s4, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第一天收盤", "第二天收盤", "第三天收盤", "三日累積漲幅", "目前收盤價"]},
         5: {"title": "四手紅盤", "icon": "🎰", "desc": "最近一個月內，連續四天漲停 或 連續四天累積漲幅≥40%，依日期由新到舊排列",
-            "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅"]},
+            "stocks": s5, "columns": ["股票代號", "股票名稱", "觸發條件", "第一天", "第二天", "第三天", "第四天", "第一天收盤", "第四天收盤", "四日累積漲幅", "目前收盤價"]},
         6: {"title": "五手紅盤", "icon": "🔴", "desc": "最近一個月內，連續五天累積漲幅≥50%，依日期由新到舊排列",
             "stocks": s6, "columns": ["股票代號", "股票名稱", "第一天", "第五天", "第一天收盤", "第五天收盤", "五日累積漲幅", "即時股價"]},
         7: None,  # 懶載入，下方單獨處理
