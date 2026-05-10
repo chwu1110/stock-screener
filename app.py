@@ -17,6 +17,31 @@ FINLAB_API_KEY = "LBmwu3n0/lor77y1Z0aBH/Q0WBI6+bLJrA2TlchZAM1jb6jJaURRbaQRZRWjoz
 # ── 處置股歷史（記憶體版，Railway 啟動時從 JSON 載入，之後每天自動更新）──
 _disposal_history = {}
 
+
+def is_valid_stock(sid):
+    """過濾掉權證、可轉債、ETF、特別股等非普通股"""
+    if not sid:
+        return False
+    # 權證：6碼純數字
+    if len(sid) == 6 and sid.isdigit():
+        return False
+    # 可轉債：數字+英文字母結尾（如 1234A、5678B）
+    if len(sid) == 5 and sid[:-1].isdigit() and sid[-1].isalpha():
+        return False
+    # ETF：00開頭
+    if sid.startswith("00") and len(sid) >= 5:
+        return False
+    # 特別股：數字+英文（如 2887A）
+    if sid[-1].isalpha():
+        return False
+    # 正常股票：4碼數字
+    if len(sid) == 4 and sid.isdigit():
+        return True
+    # 上櫃股票：4-5碼數字
+    if len(sid) <= 5 and sid.isdigit():
+        return True
+    return False
+
 def _fetch_disposal_twse():
     urls = [
         "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
@@ -462,45 +487,31 @@ def get_all_data():
     start_1yr = (today - timedelta(days=90)).strftime("%Y-%m-%d")  # 改為3個月，加快速度
     start_3m = (today - timedelta(days=90)).strftime("%Y-%m-%d")
 
-    # ── 改用 FinLab disposal_information 取得處置股歷史（上市+上櫃都有）──
-    try:
-        disposal_df = data.get("disposal_information")
-        two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
-        disposal_stocks_2m = {}
-        for _, row in disposal_df.iterrows():
-            try:
-                sid   = str(row.get("stock_id", "")).strip()
-                name  = str(row.get("證券名稱", "")).strip()
-                start = str(row.get("處置開始時間", ""))[:10]
-                end   = str(row.get("處置結束時間", ""))[:10]
-                if not sid or start < two_months_ago:
-                    continue
-                period = f"{start}~{end}" if end else start
-                if sid not in disposal_stocks_2m:
-                    disposal_stocks_2m[sid] = {"name": name, "period": period}
-            except:
-                continue
-        print(f"FinLab 處置股歷史：兩個月內 {len(disposal_stocks_2m)} 檔")
-    except Exception as e:
-        print(f"FinLab disposal_information 失敗: {e}，改用本地JSON")
+    # 載入處置股歷史資料（從本地 JSON 載入，每天由排程自動更新）
+    disposal_history = _disposal_history
+    if not disposal_history:
+        try:
+            history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
+            if os.path.exists(history_path):
+                with open(history_path, "r", encoding="utf-8") as f:
+                    _disposal_history.update(json.load(f))
+                disposal_history = _disposal_history
+                print(f"處置股歷史從本地 JSON 載入：{len(disposal_history)} 天")
+        except Exception as e:
+            print(f"讀取處置股歷史失敗: {e}")
+        # 同時立刻抓今天的資料
+        update_disposal_history()
         disposal_history = _disposal_history
-        if not disposal_history:
-            try:
-                history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
-                if os.path.exists(history_path):
-                    with open(history_path, "r", encoding="utf-8") as f:
-                        _disposal_history.update(json.load(f))
-                    disposal_history = _disposal_history
-            except Exception as e2:
-                print(f"本地JSON也失敗: {e2}")
-        two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
-        disposal_stocks_2m = {}
-        for date_str, stocks in disposal_history.items():
-            if date_str >= two_months_ago:
-                for sid, info in stocks.items():
-                    if sid not in disposal_stocks_2m:
-                        disposal_stocks_2m[sid] = info
-        print(f"本地JSON處置股：兩個月內 {len(disposal_stocks_2m)} 檔")
+
+    # 整合兩個月內的歷史處置股
+    two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
+    disposal_stocks_2m = {}
+    for date_str, stocks in disposal_history.items():
+        if date_str >= two_months_ago:
+            for sid, info in stocks.items():
+                if sid and is_valid_stock(sid) and sid not in disposal_stocks_2m:
+                    disposal_stocks_2m[sid] = info
+    print(f"兩個月內處置股數: {len(disposal_stocks_2m)}, 含7721: {'7721' in disposal_stocks_2m}, 含6693: {'6693' in disposal_stocks_2m}")
 
     # 存進全域，供即時策略12使用
     global _global_disposal_2m
@@ -724,31 +735,36 @@ def get_all_data():
         # 改用 FinLab disposal_information 取得目前處置股（上市+上櫃）
         disposal_today = {}
         try:
-            disposal_df = data.get("disposal_information")
+            disposal_df_now = data.get("disposal_information")
             today_ts = pd.Timestamp(date.today())
-            for _, row in disposal_df.iterrows():
+            for _, row in disposal_df_now.iterrows():
                 try:
                     sid   = str(row.get("stock_id", "")).strip()
                     name  = str(row.get("證券名稱", "")).strip()
                     start = str(row.get("處置開始時間", ""))[:10]
                     end   = str(row.get("處置結束時間", ""))[:10]
-                    if not sid or not end:
+                    if not sid or not end or not is_valid_stock(sid):
                         continue
                     end_ts = pd.Timestamp(end)
                     if end_ts < today_ts:
-                        continue  # 已出關
+                        continue
                     period = f"{start}~{end}"
                     if sid not in disposal_today:
                         disposal_today[sid] = {"name": name, "period": period}
                 except:
                     continue
-            print(f"FinLab 即時處置股：共{len(disposal_today)}檔（上市+上櫃）")
+            print(f"FinLab 即時處置股：共{len(disposal_today)}檔（上市+上櫃，已過濾）")
         except Exception as e:
-            print(f"FinLab disposal_information 失敗: {e}，改用即時API")
-            twse_now = _fetch_disposal_twse()
-            otc_now  = _fetch_disposal_otc()
-            disposal_today = {**twse_now, **otc_now}
-            print(f"API即時資料：上市{len(twse_now)}檔 + 上櫃{len(otc_now)}檔 = 共{len(disposal_today)}檔")
+            print(f"FinLab disposal_information 失敗: {e}，改用歷史JSON")
+            today_str = date.today().strftime("%Y-%m-%d")
+            disposal_today = _disposal_history.get(today_str, {})
+            if not disposal_today:
+                for d_str in sorted(_disposal_history.keys(), reverse=True):
+                    disposal_today = _disposal_history[d_str]
+                    if disposal_today:
+                        print(f"處置股使用 {d_str} 的資料（共{len(disposal_today)}檔）")
+                        break
+            print(f"處置股資料來源：共{len(disposal_today)}檔")
 
         def parse_period(period_str):
             """解析處置期間，支援民國年/西元年、/或-分隔，回傳 (start_ts, end_ts, period_ad)"""
@@ -807,26 +823,14 @@ def get_all_data():
                 if end_date_ts < pd.Timestamp(today.date()):
                     continue
 
-                if stock_id not in close_3m.columns or len(close_3m[stock_id].dropna()) < 5:
-                    print(f"  {stock_id} 不在close_3m或資料不足，僅顯示基本資訊")
-                    s7b.append({
-                        "股票代號": stock_id,
-                        "股票名稱": stock_name,
-                        "處置期間": date_period_ad,
-                        "出關日": end_date_str,
-                        "處置第幾天": "-",
-                        "即時股價": "-",
-                        "昨收": "-",
-                        "處置前高點": "-",
-                        "處置期間最低": "-",
-                        "10日均線": "-",
-                        "20日均線": "-",
-                        "_below_ma10": False,
-                        "_end_date": end_date_ts,
-                        "_stock_id": stock_id,
-                    })
+                if stock_id not in close_3m.columns:
+                    if stock_id in ["7711", "1591"]:
+                        print(f"  [{stock_id}] 不在 close_3m")
                     continue
                 prices = close_3m[stock_id].dropna()
+                if len(prices) < 20:
+                    print(f"  跳過 {stock_id}：資料不足20筆({len(prices)}筆)")
+                    continue
 
                 trading_days = prices.index[prices.index >= start_date]
                 today_ts = pd.Timestamp(today)
@@ -1096,12 +1100,6 @@ def get_s7_data():
     _s7_cache["data"] = s7
     _s7_cache["time"] = now
     return s7
-
-@app.route("/clear_cache")
-def clear_cache():
-    _cache.update({"data": None, "time": None})
-    _s7_cache.update({"data": None, "time": None})
-    return "Cache cleared!", 200
 
 @app.route("/strategy/<int:sid>")
 def strategy(sid):
