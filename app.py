@@ -858,7 +858,7 @@ def get_all_data():
                     "股票代號": stock_id,
                     "股票名稱": stock_name,
                     "處置期間": date_period_ad,
-                    "出關日": end_date_str,
+                    "出關日": (end_date_ts + pd.tseries.offsets.BDay(1)).strftime("%Y/%m/%d"),
                     "處置第幾天": f"第{today_idx}天",
                     "即時股價": round(hist_price, 2),
                     "昨收": round(hist_price, 2),
