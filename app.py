@@ -489,8 +489,8 @@ def get_all_data():
                 if not is_valid_stock(sid):
                     continue
                 period = f"{start}~{end}" if end else start
-                if sid not in disposal_stocks_2m or end > disposal_stocks_2m[sid].get("end", ""):
-                    disposal_stocks_2m[sid] = {"name": name, "period": period, "end": end}
+                if sid not in disposal_stocks_2m:
+                    disposal_stocks_2m[sid] = {"name": name, "period": period}
             except:
                 continue
         print(f"FinLab 兩個月內處置股：{len(disposal_stocks_2m)} 檔")
@@ -741,8 +741,8 @@ def get_all_data():
                     if pd.Timestamp(end) < today_ts:
                         continue  # 已出關
                     period = f"{start}~{end}"
-                    if sid not in disposal_today or end > disposal_today[sid].get("end", ""):
-                        disposal_today[sid] = {"name": name, "period": period, "end": end}
+                    if sid not in disposal_today:
+                        disposal_today[sid] = {"name": name, "period": period}
                 except:
                     continue
             print(f"FinLab 即時處置股：{len(disposal_today)} 檔（上市+上櫃）")
@@ -820,6 +820,12 @@ def get_all_data():
                 today_idx = len(trading_days) + 1 if len(trading_days) > 0 and trading_days[-1] < today_ts else len(trading_days)
 
                 print(f"  {stock_id} 開始:{str(start_date)[:10]} 交易天數:{len(trading_days)} 估計今天第{today_idx}天")
+                if stock_id == "7711":
+                    h_debug = high_3m[stock_id].dropna() if stock_id in high_3m.columns else None
+                    if h_debug is not None:
+                        pre_debug = h_debug[h_debug.index < start_date]
+                        print(f"  [7711debug] 處置前最後10筆最高價: {pre_debug.tail(10).to_dict()}")
+                        print(f"  [7711debug] 前10日最高點: {pre_debug.tail(10).max()}")
 
                 ma10 = prices.rolling(10).mean()
                 ma20 = prices.rolling(20).mean()
@@ -833,10 +839,10 @@ def get_all_data():
                     if len(pre_highs) == 0:
                         # start_date 可能是非交易日，往前找
                         pre_highs = h[h.index <= start_date].iloc[:-1] if len(h[h.index <= start_date]) > 0 else h.iloc[:0]
-                    high_10d = pre_highs.iloc[-20:].max() if len(pre_highs) > 0 else h.max()
+                    high_10d = pre_highs.iloc[-10:].max() if len(pre_highs) > 0 else h.max()
                 else:
                     pre_prices = prices[prices.index < start_date]
-                    high_10d = pre_prices.iloc[-20:].max() if len(pre_prices) > 0 else prices.max()
+                    high_10d = pre_prices.iloc[-10:].max() if len(pre_prices) > 0 else prices.max()
 
                 # 處置期間最低點（用盤中最低價）
                 low_day = None
