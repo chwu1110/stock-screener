@@ -297,6 +297,9 @@ DETAIL_TEMPLATE = """
         .updated { text-align: center; color: #475569; font-size: 12px; margin-top: 20px; }
         .below-ma10 td { background: rgba(248, 113, 113, 0.08); }
         .below-ma10:hover td { background: rgba(248, 113, 113, 0.15) !important; }
+        .search-box { padding: 8px 14px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 14px; width: 220px; outline: none; }
+        .search-box:focus { border-color: #38bdf8; }
+        .hidden-row { display: none; }
     </style>
 </head>
 <body>
@@ -306,10 +309,11 @@ DETAIL_TEMPLATE = """
 
     <div class="top-bar">
         <div class="stat-box">
-            <div class="num">{{ stocks|length }}</div>
+            <div class="num" id="stock-count">{{ stocks|length }}</div>
             <div class="label">符合股票數</div>
         </div>
         {% if stocks %}
+        <input type="text" class="search-box" id="search-input" placeholder="搜尋股票代號或名稱..." oninput="filterTable()">
         <button class="btn-export" onclick="exportCSV()">匯出 CSV</button>
         {% endif %}
     </div>
@@ -349,6 +353,22 @@ DETAIL_TEMPLATE = """
     <p class="updated">資料來源：FinLab｜更新時間：{{ update_time }}</p>
 
 <script>
+function filterTable() {
+    var input = document.getElementById('search-input').value.toLowerCase();
+    var rows = document.querySelectorAll('#main-table tbody tr');
+    var count = 0;
+    rows.forEach(function(row) {
+        var text = row.textContent.toLowerCase();
+        if (text.indexOf(input) > -1) {
+            row.classList.remove('hidden-row');
+            count++;
+        } else {
+            row.classList.add('hidden-row');
+        }
+    });
+    document.getElementById('stock-count').textContent = count;
+}
+
 function exportCSV() {
     var table = document.getElementById('main-table');
     if (!table) return;
