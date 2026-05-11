@@ -313,7 +313,7 @@ DETAIL_TEMPLATE = """
             <div class="label">符合股票數</div>
         </div>
         {% if stocks %}
-        <input type="text" class="search-box" id="search-input" placeholder="搜尋股票代號或名稱...">
+        <input type="text" class="search-box" id="search-input" placeholder="搜尋股票代號或名稱..." onkeyup="filterTable(this.value)">
         <button class="btn-export" onclick="exportCSV()">匯出 CSV</button>
         {% endif %}
     </div>
@@ -354,19 +354,12 @@ DETAIL_TEMPLATE = """
 
 <script>
 function filterTable(val) {
-    var q = val.trim().toLowerCase();
+    var q = val.toLowerCase();
     var rows = document.querySelectorAll("#main-table tbody tr");
     var count = 0;
     for (var i = 0; i < rows.length; i++) {
-        var cells = rows[i].querySelectorAll("td");
-        var found = false;
-        for (var j = 0; j < cells.length; j++) {
-            if (cells[j].textContent.trim().toLowerCase().indexOf(q) !== -1) {
-                found = true;
-                break;
-            }
-        }
-        if (q === "" || found) {
+        var txt = rows[i].textContent.toLowerCase();
+        if (txt.indexOf(q) !== -1) {
             rows[i].style.display = "";
             count++;
         } else {
@@ -376,13 +369,6 @@ function filterTable(val) {
     var el = document.getElementById("stock-count");
     if (el) el.textContent = count;
 }
-
-document.addEventListener("DOMContentLoaded", function() {
-    var inp = document.getElementById("search-input");
-    if (inp) {
-        inp.addEventListener("input", function() { filterTable(this.value); });
-    }
-});
 
 function exportCSV() {
     var table = document.getElementById('main-table');
@@ -397,7 +383,7 @@ function exportCSV() {
         });
         lines.push(rowData.join(','));
     });
-    var csv = '﻿' + lines.join('
+    var csv = '\ufeff' + lines.join('
 ');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     var a = document.createElement('a');
@@ -409,7 +395,7 @@ function exportCSV() {
 });
         lines.push(rowData.join(','));
     });
-    var csv = '﻿' + lines.join('
+    var csv = '\ufeff' + lines.join('
 ');
     var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     var a = document.createElement('a');
