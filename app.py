@@ -464,9 +464,10 @@ def get_all_data():
 
     # 用 FinLab 取兩個月內處置股歷史（上市+上櫃全包）
     two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
+    today_str_tmp = today.strftime("%Y-%m-%d")
     disposal_stocks_2m = {}
     try:
-        data.date_range = (two_months_ago, end_date_tmp)
+        data.date_range = (two_months_ago, today_str_tmp)
         disp_df = data.get("disposal_information")
         for _, row in disp_df.iterrows():
             try:
@@ -719,7 +720,6 @@ def get_all_data():
         today_ts  = pd.Timestamp(today_str)
         disposal_today = {}
         try:
-            data.date_range = (two_months_ago_str, today_str)
             disp_df_now = data.get("disposal_information")
             for _, row in disp_df_now.iterrows():
                 try:
