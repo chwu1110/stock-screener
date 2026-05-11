@@ -299,7 +299,7 @@ DETAIL_TEMPLATE = """
         .below-ma10:hover td { background: rgba(248, 113, 113, 0.15) !important; }
         .search-box { padding: 8px 14px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 14px; width: 220px; outline: none; }
         .search-box:focus { border-color: #38bdf8; }
-        .hidden-row { display: none; }
+        .hidden-row { display: none !important; }
     </style>
 </head>
 <body>
@@ -313,7 +313,7 @@ DETAIL_TEMPLATE = """
             <div class="label">符合股票數</div>
         </div>
         {% if stocks %}
-        <input type="text" class="search-box" id="search-input" placeholder="搜尋股票代號或名稱..." oninput="filterTable()">
+        <input type="text" class="search-box" id="search-input" placeholder="搜尋股票代號或名稱..." onkeyup="filterTable(this.value)">
         <button class="btn-export" onclick="exportCSV()">匯出 CSV</button>
         {% endif %}
     </div>
@@ -353,20 +353,21 @@ DETAIL_TEMPLATE = """
     <p class="updated">資料來源：FinLab｜更新時間：{{ update_time }}</p>
 
 <script>
-function filterTable() {
-    var input = document.getElementById('search-input').value.toLowerCase();
-    var rows = document.querySelectorAll('#main-table tbody tr');
+function filterTable(val) {
+    var q = val.toLowerCase();
+    var rows = document.querySelectorAll("#main-table tbody tr");
     var count = 0;
-    rows.forEach(function(row) {
-        var text = row.textContent.toLowerCase();
-        if (text.indexOf(input) > -1) {
-            row.classList.remove('hidden-row');
+    for (var i = 0; i < rows.length; i++) {
+        var txt = rows[i].textContent.toLowerCase();
+        if (txt.indexOf(q) !== -1) {
+            rows[i].style.display = "";
             count++;
         } else {
-            row.classList.add('hidden-row');
+            rows[i].style.display = "none";
         }
-    });
-    document.getElementById('stock-count').textContent = count;
+    }
+    var el = document.getElementById("stock-count");
+    if (el) el.textContent = count;
 }
 
 function exportCSV() {
