@@ -489,8 +489,8 @@ def get_all_data():
                 if not is_valid_stock(sid):
                     continue
                 period = f"{start}~{end}" if end else start
-                if sid not in disposal_stocks_2m:
-                    disposal_stocks_2m[sid] = {"name": name, "period": period}
+                if sid not in disposal_stocks_2m or end > disposal_stocks_2m[sid].get("end", ""):
+                    disposal_stocks_2m[sid] = {"name": name, "period": period, "end": end}
             except:
                 continue
         print(f"FinLab 兩個月內處置股：{len(disposal_stocks_2m)} 檔")
@@ -741,8 +741,8 @@ def get_all_data():
                     if pd.Timestamp(end) < today_ts:
                         continue  # 已出關
                     period = f"{start}~{end}"
-                    if sid not in disposal_today:
-                        disposal_today[sid] = {"name": name, "period": period}
+                    if sid not in disposal_today or end > disposal_today[sid].get("end", ""):
+                        disposal_today[sid] = {"name": name, "period": period, "end": end}
                 except:
                     continue
             print(f"FinLab 即時處置股：{len(disposal_today)} 檔（上市+上櫃）")
