@@ -17,6 +17,15 @@ FINLAB_API_KEY = "LBmwu3n0/lor77y1Z0aBH/Q0WBI6+bLJrA2TlchZAM1jb6jJaURRbaQRZRWjoz
 # ── 處置股歷史（記憶體版，Railway 啟動時從 JSON 載入，之後每天自動更新）──
 _disposal_history = {}
 
+def is_valid_stock(sid):
+    if not sid:
+        return False
+    sid = sid.strip()
+    if len(sid) == 4 and sid.isdigit():
+        return True
+    return False
+
+
 def _fetch_disposal_twse():
     urls = [
         "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
