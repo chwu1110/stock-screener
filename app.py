@@ -313,7 +313,7 @@ DETAIL_TEMPLATE = """
             <div class="label">符合股票數</div>
         </div>
         {% if stocks %}
-        <input type="text" class="search-box" id="search-input" placeholder="搜尋股票代號或名稱..." onkeyup="filterTable(this.value)">
+        <input type="text" class="search-box" id="search-input" placeholder="搜尋股票代號或名稱...">
         <button class="btn-export" onclick="exportCSV()">匯出 CSV</button>
         {% endif %}
     </div>
@@ -376,6 +376,13 @@ function filterTable(val) {
     var el = document.getElementById("stock-count");
     if (el) el.textContent = count;
 }
+
+document.addEventListener("DOMContentLoaded", function() {
+    var inp = document.getElementById("search-input");
+    if (inp) {
+        inp.addEventListener("input", function() { filterTable(this.value); });
+    }
+});
 
 function exportCSV() {
     var table = document.getElementById('main-table');
