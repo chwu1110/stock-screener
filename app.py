@@ -354,12 +354,19 @@ DETAIL_TEMPLATE = """
 
 <script>
 function filterTable(val) {
-    var q = val.toLowerCase();
+    var q = val.trim().toLowerCase();
     var rows = document.querySelectorAll("#main-table tbody tr");
     var count = 0;
     for (var i = 0; i < rows.length; i++) {
-        var txt = rows[i].textContent.toLowerCase();
-        if (txt.indexOf(q) !== -1) {
+        var cells = rows[i].querySelectorAll("td");
+        var found = false;
+        for (var j = 0; j < cells.length; j++) {
+            if (cells[j].textContent.trim().toLowerCase().indexOf(q) !== -1) {
+                found = true;
+                break;
+            }
+        }
+        if (q === "" || found) {
             rows[i].style.display = "";
             count++;
         } else {
