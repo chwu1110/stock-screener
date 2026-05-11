@@ -466,6 +466,7 @@ def get_all_data():
     two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
     disposal_stocks_2m = {}
     try:
+        data.date_range = (two_months_ago, end_date_tmp)
         disp_df = data.get("disposal_information")
         for _, row in disp_df.iterrows():
             try:
@@ -718,6 +719,7 @@ def get_all_data():
         today_ts  = pd.Timestamp(today_str)
         disposal_today = {}
         try:
+            data.date_range = (two_months_ago_str, today_str)
             disp_df_now = data.get("disposal_information")
             for _, row in disp_df_now.iterrows():
                 try:
