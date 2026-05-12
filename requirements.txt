@@ -1,5 +1,5 @@
-flask
-finlab==2.0.2
+﻿flask
+finlab==2.0.6
 pandas
 requests
 urllib3
