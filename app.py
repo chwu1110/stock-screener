@@ -769,8 +769,9 @@ def get_all_data():
                     if pd.Timestamp(end) < today_ts:
                         continue  # 已出關
                     period = f"{start}~{end}"
-                    if sid not in disposal_today:
-                        disposal_today[sid] = {"name": name, "period": period}
+                    # 同一檔有多筆時，保留 start 最新的那筆（最新一次處置）
+                    if sid not in disposal_today or start > disposal_today[sid].get("_start", ""):
+                        disposal_today[sid] = {"name": name, "period": period, "_start": start}
                 except:
                     continue
             print(f"FinLab 即時處置股：{len(disposal_today)} 檔（上市+上櫃）")
