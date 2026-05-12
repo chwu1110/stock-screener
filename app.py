@@ -3,19 +3,13 @@ import finlab
 from finlab import data
 import pandas as pd
 from datetime import datetime, timedelta, date
-import json
 import requests
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from flask import Flask, render_template_string
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 
 FINLAB_API_KEY = "LBmwu3n0/lor77y1Z0aBH/Q0WBI6+bLJrA2TlchZAM1jb6jJaURRbaQRZRWjozwP#vip_m"
-
-# ── 處置股歷史（記憶體版，Railway 啟動時從 JSON 載入，之後每天自動更新）──
-_disposal_history = {}
 
 def is_valid_stock(sid):
     if not sid:
@@ -33,152 +27,7 @@ def clean_stock_id(sid):
     return sid.strip().upper().replace(".TWO", "").replace(".TW", "")
 
 
-def _fetch_disposal_twse():
-    urls = [
-        "https://www.twse.com.tw/rwd/zh/announcement/punish?response=json",
-        "https://www.twse.com.tw/zh/announcement/punish?response=json",
-        "https://www.twse.com.tw/exchangeReport/BWIBBU_d?response=json",
-    ]
-    stocks = {}
-    for url in urls:
-        try:
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}, timeout=15, verify=False)
-            if resp.status_code != 200 or not resp.text.strip():
-                print(f"處置股上市 {url} 回應異常: status={resp.status_code}")
-                continue
-            d = resp.json()
-            if d.get("stat") == "OK":
-                for row in d.get("data", []):
-                    try:
-                        sid  = row[2].strip()
-                        name = row[3].strip()
-                        period  = row[6].strip() if len(row) > 6 else ""
-                        content = row[8].strip() if len(row) > 8 else ""
-                        if sid and sid not in stocks:
-                            stocks[sid] = {"name": name, "period": period,
-                                           "is_20min": "二十分鐘" in content, "market": "上市"}
-                    except:
-                        continue
-                if stocks:
-                    print(f"處置股上市抓取成功: {len(stocks)} 檔")
-                    break
-        except Exception as e:
-            print(f"處置股上市抓取失敗 {url}: {e}")
-    return stocks
 
-def _fetch_disposal_otc():
-    """從 TPEX OpenAPI 抓上櫃處置股"""
-    headers = {"User-Agent": "Mozilla/5.0"}
-    stocks = {}
-
-    # 方法1：TPEX OpenAPI 官方端點
-    try:
-        resp = requests.get(
-            "https://www.tpex.org.tw/openapi/v1/tpex_disposal_information",
-            headers=headers, timeout=15, verify=False
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, list) and data:
-                for row in data:
-                    try:
-                        sid    = str(row.get("SecuritiesCompanyCode", "")).strip()
-                        name   = str(row.get("CompanyName", "")).strip()
-                        dp     = str(row.get("DisposalPeriod", "")).strip()
-                        def roc_yyyymmdd_to_ad(s):
-                            s = s.strip()
-                            if len(s) == 7:
-                                y = int(s[:3]) + 1911
-                                m = s[3:5]
-                                d = s[5:7]
-                                return f"{y}/{m}/{d}"
-                            return s
-                        if "~" in dp:
-                            pts = dp.split("~")
-                            period = f"{roc_yyyymmdd_to_ad(pts[0])}~{roc_yyyymmdd_to_ad(pts[1])}"
-                        else:
-                            period = dp
-                        is_20min = "20分鐘" in str(row.get("DisposalCondition", ""))
-                        if sid and sid not in stocks:
-                            stocks[sid] = {"name": name, "period": period,
-                                           "is_20min": is_20min, "market": "上櫃"}
-                    except:
-                        continue
-                if stocks:
-                    print(f"處置股上櫃抓取成功 (OpenAPI): {len(stocks)} 檔")
-                    return stocks
-    except Exception as e:
-        print(f"處置股上櫃 OpenAPI 失敗: {e}")
-
-    # 方法2：舊版 aaData 格式
-    for url in [
-        "https://www.tpex.org.tw/web/bulletin/disposal/disposal_result.php?l=zh-tw&o=json",
-        "https://www.tpex.org.tw/rwd/zh/announcement/punish?response=json",
-    ]:
-        try:
-            resp = requests.get(url, headers=headers, timeout=15, verify=False)
-            if resp.status_code != 200:
-                continue
-            data = resp.json()
-            rows = data.get("aaData", data.get("data", []))
-            for row in rows:
-                try:
-                    sid    = str(row[2]).strip()
-                    name   = str(row[3]).strip()
-                    period = str(row[6]).strip() if len(row) > 6 else ""
-                    content= str(row[8]).strip() if len(row) > 8 else ""
-                    is_20min = "20" in content or "二十分鐘" in content
-                    if sid and sid not in stocks:
-                        stocks[sid] = {"name": name, "period": period,
-                                       "is_20min": is_20min, "market": "上櫃"}
-                except:
-                    continue
-            if stocks:
-                print(f"處置股上櫃抓取成功 (legacy): {len(stocks)} 檔")
-                return stocks
-        except Exception as e:
-            print(f"處置股上櫃失敗 {url}: {e}")
-
-    print("處置股上櫃：所有方法皆失敗")
-    return stocks
-
-def refresh_disposal_from_github():
-    """每天從 GitHub 重新載入最新的處置股歷史"""
-    global _disposal_history
-    try:
-        github_url = "https://raw.githubusercontent.com/chwu1110/stock-screener/main/disposal_history.json"
-        resp = requests.get(github_url, timeout=15)
-        if resp.status_code == 200 and resp.text.strip():
-            _disposal_history = resp.json()
-            print(f"[排程] 從 GitHub 更新處置股歷史：{len(_disposal_history)} 天")
-        else:
-            print(f"[排程] GitHub 載入失敗: status={resp.status_code}")
-    except Exception as e:
-        print(f"[排程] 從 GitHub 讀取處置股失敗: {e}")
-
-def update_disposal_history():
-    """每天自動抓處置股資料存入記憶體，並同步到 disposal_history.json"""
-    global _disposal_history
-    today_str = date.today().strftime("%Y-%m-%d")
-    print(f"[排程] 更新處置股資料 {today_str}...")
-    twse = _fetch_disposal_twse()
-    otc  = _fetch_disposal_otc()
-    stocks = {**twse, **otc}
-    if stocks:
-        _disposal_history[today_str] = stocks
-        # 清除65天以前的資料
-        cutoff = (date.today() - timedelta(days=65)).strftime("%Y-%m-%d")
-        _disposal_history = {d: v for d, v in _disposal_history.items() if d >= cutoff}
-        # 同步寫回 JSON（讓重啟後不會遺失）
-        try:
-            history_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "disposal_history.json")
-            with open(history_path, "w", encoding="utf-8") as f:
-                json.dump(_disposal_history, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"寫入 disposal_history.json 失敗: {e}")
-        print(f"[排程] 處置股更新完成，共 {len(stocks)} 檔")
-    else:
-        print("[排程] 今天沒有抓到處置股資料")
 
 HOME_TEMPLATE = """
 <!DOCTYPE html>
@@ -418,50 +267,6 @@ function exportCSV() {
 """
 
 
-def get_twse_realtime(stock_ids):
-    """從證交所抓上市即時股價，一次最多50檔"""
-    prices = {}
-    try:
-        ids_str = "|".join(stock_ids)
-        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=10, verify=False)
-        data = resp.json()
-        now_str = datetime.now().strftime("%H:%M")
-        for item in data.get("msgArray", []):
-            sid = item.get("c", "")
-            price_str = item.get("z", "-")  # 最新成交價
-            if price_str and price_str != "-":
-                try:
-                    prices[sid] = {"price": float(price_str), "time": now_str}
-                except:
-                    pass
-    except Exception as e:
-        print(f"證交所即時API錯誤: {e}")
-    return prices
-
-def get_tpex_realtime(stock_ids):
-    """從櫃買中心抓上櫃即時股價"""
-    prices = {}
-    try:
-        ids_str = "|".join([f"otc_{sid}.tw" for sid in stock_ids])
-        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={ids_str}&json=1&delay=0"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=10, verify=False)
-        data = resp.json()
-        now_str = datetime.now().strftime("%H:%M")
-        for item in data.get("msgArray", []):
-            sid = item.get("c", "")
-            price_str = item.get("z", "-")
-            if price_str and price_str != "-":
-                try:
-                    prices[sid] = {"price": float(price_str), "time": now_str}
-                except:
-                    pass
-    except Exception as e:
-        print(f"櫃買即時API錯誤: {e}")
-    return prices
-
 FUGLE_API_KEY = os.environ.get("FUGLE_API_KEY", "")
 
 _realtime_cache = {"prices": {}, "time": None}
@@ -495,16 +300,12 @@ def get_all_data():
     finlab.login(api_token=FINLAB_API_KEY)
 
     today = datetime.today()
-    start_2026 = "2026-01-01"
-    start_1yr = (today - timedelta(days=90)).strftime("%Y-%m-%d")  # 改為3個月，加快速度
     start_3m = (today - timedelta(days=90)).strftime("%Y-%m-%d")
 
     # 用 FinLab 取兩個月內處置股歷史（上市+上櫃全包）
     two_months_ago = (today - timedelta(days=60)).strftime("%Y-%m-%d")
-    today_date_str = today.strftime("%Y-%m-%d")
     disposal_stocks_2m = {}
     try:
-        disp_df = data.get("disposal_information")
         disp_df = data.get("disposal_information")
         for _, row in disp_df.iterrows():
             try:
@@ -746,7 +547,7 @@ def get_all_data():
     # 策略七：懶載入，點進頁面才計算（避免啟動 timeout）
     s7 = []
 
-    # 策略七B：處置股 — 使用 _disposal_history 今日資料（最完整）
+    # 策略七B：處置股（使用 FinLab disposal_information）
     s7b = []
     try:
         import re
@@ -777,38 +578,6 @@ def get_all_data():
             print(f"FinLab 即時處置股：{len(disposal_today)} 檔（上市+上櫃）")
         except Exception as e:
             print(f"FinLab disposal_information 失敗: {e}")
-
-        # ── Fallback：用 _disposal_history（TWSE/TPEX 爬蟲）補充 FinLab 漏掉的檔 ──
-        try:
-            hist_today = _disposal_history.get(today_str, {})
-            added = 0
-            for sid, info in hist_today.items():
-                sid = clean_stock_id(sid)
-                if not is_valid_stock(sid):
-                    continue
-                if sid in disposal_today:
-                    continue  # FinLab 已有，不覆蓋
-                # 嘗試解析 period 確認今天仍在處置中
-                raw_period = info.get("period", "")
-                parts = raw_period.replace("～", "~").split("~")
-                if len(parts) == 2:
-                    try:
-                        def _parse_ts(s):
-                            s = s.strip().replace("-", "/")
-                            p = s.split("/")
-                            y = int(p[0]) + 1911 if len(p[0]) == 3 else int(p[0])
-                            return pd.Timestamp(y, int(p[1]), int(p[2]))
-                        end_ts = _parse_ts(parts[1])
-                        if end_ts < pd.Timestamp(today.date()):
-                            continue  # 已出關
-                    except:
-                        pass
-                disposal_today[sid] = {"name": info.get("name", ""), "period": raw_period}
-                added += 1
-            if added:
-                print(f"  _disposal_history 補充 {added} 檔，合計 {len(disposal_today)} 檔")
-        except Exception as e:
-            print(f"  _disposal_history 補充失敗: {e}")
 
         def parse_period(period_str):
             """解析處置期間，支援民國年/西元年、/或-分隔，回傳 (start_ts, end_ts, period_ad)"""
@@ -845,22 +614,8 @@ def get_all_data():
                 period_raw  = info.get("period", "")
                 start_date, end_date_ts, date_period_ad = parse_period(period_raw)
                 if start_date is None or end_date_ts is None:
-                    # 嘗試從 stockwarden 補充日期
-                    sw_stock = sw_data_shared.get(stock_id, {})
-                    if sw_stock:
-                        sorted_dates = sorted(sw_stock.keys(), reverse=True)
-                        for ann_date in sorted_dates:
-                            item = sw_stock[ann_date]
-                            k = str(item.get("k", ""))
-                            f_date = str(item.get("f", ""))
-                            if k and f_date:
-                                start_date, end_date_ts, date_period_ad = parse_period(f"{k}～{f_date}")
-                                if start_date and end_date_ts:
-                                    stock_name = str(item.get("h", stock_name))
-                                    break
-                    if start_date is None or end_date_ts is None:
-                        print(f"  {stock_id} 日期格式錯誤: {repr(period_raw)}")
-                        continue
+                    print(f"  {stock_id} 日期格式錯誤: {repr(period_raw)}")
+                    continue
                 end_date_str = end_date_ts.strftime("%Y/%m/%d")
 
                 # 過濾已出關的股票（出關日早於今天才過濾）
@@ -942,20 +697,10 @@ def get_all_data():
 
         s7b.sort(key=lambda x: x["_end_date"])
 
-        # 批次抓即時股價（用 TWSE/TPEX 批次 API，速度快）
+        # 批次抓即時股價（Fugle）
         s7b_ids = [x["_stock_id"] for x in s7b]
         if s7b_ids:
-            # 依市場分組批次抓取
-            twse_ids = [f"tse_{sid}.tw" for sid in s7b_ids]
-            otc_ids  = [sid for sid in s7b_ids]  # get_tpex_realtime 會自動加 otc_ 前綴
-            rt_twse  = get_twse_realtime(twse_ids)
-            rt_tpex  = get_tpex_realtime(otc_ids)
-            rt_prices = {**rt_twse, **rt_tpex}
-            # fallback: 抓不到的用 Fugle
-            missing = [sid for sid in s7b_ids if sid not in rt_prices]
-            if missing:
-                rt_fugle = get_realtime_prices(missing)
-                rt_prices.update(rt_fugle)
+            rt_prices = get_realtime_prices(s7b_ids)
             for item in s7b:
                 item.pop("_end_date", None)
                 sid = item.pop("_stock_id")
@@ -1240,16 +985,11 @@ def check_and_notify_s7():
     except Exception as e:
         print(f"check_and_notify_s7 錯誤: {e}")
 
-# 啟動排程器：每天 14:30 自動更新處置股資料
+# 啟動排程器
 scheduler = BackgroundScheduler(timezone="Asia/Taipei")
-scheduler.add_job(update_disposal_history, "cron", hour=14, minute=30)
-scheduler.add_job(refresh_disposal_from_github, "cron", hour=14, minute=35)  # 本機push後Railway自動同步
 scheduler.add_job(lambda: (_cache.update({"data": None, "time": None}), _s7_cache.update({"data": None, "time": None})), "cron", hour=15, minute=0)
-scheduler.add_job(check_and_notify_s7, "interval", minutes=5)  # 每5分鐘檢查一次
+scheduler.add_job(check_and_notify_s7, "interval", minutes=5)
 scheduler.start()
-
-# 啟動時立刻從 GitHub 載入最新處置股資料
-refresh_disposal_from_github()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
