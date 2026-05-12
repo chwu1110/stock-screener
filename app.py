@@ -20,10 +20,17 @@ _disposal_history = {}
 def is_valid_stock(sid):
     if not sid:
         return False
-    sid = sid.strip()
+    sid = sid.strip().upper().replace(".TWO", "").replace(".TW", "")
     if len(sid) == 4 and sid.isdigit():
         return True
     return False
+
+
+def clean_stock_id(sid):
+    """清洗股票代號：去除 .TW / .TWO 後綴，轉大寫"""
+    if not sid:
+        return ""
+    return sid.strip().upper().replace(".TWO", "").replace(".TW", "")
 
 
 def _fetch_disposal_twse():
@@ -501,7 +508,7 @@ def get_all_data():
         disp_df = data.get("disposal_information")
         for _, row in disp_df.iterrows():
             try:
-                sid   = str(row.get("stock_id", "")).strip()
+                sid   = clean_stock_id(str(row.get("stock_id", "")))
                 name  = str(row.get("證券名稱", "")).strip()
                 start = str(row.get("處置開始時間", ""))[:10]
                 end   = str(row.get("處置結束時間", ""))[:10]
@@ -753,7 +760,7 @@ def get_all_data():
             disp_df_now = data.get("disposal_information")
             for _, row in disp_df_now.iterrows():
                 try:
-                    sid   = str(row.get("stock_id", "")).strip()
+                    sid   = clean_stock_id(str(row.get("stock_id", "")))
                     name  = str(row.get("證券名稱", "")).strip()
                     start = str(row.get("處置開始時間", ""))[:10]
                     end   = str(row.get("處置結束時間", ""))[:10]
@@ -769,6 +776,38 @@ def get_all_data():
             print(f"FinLab 即時處置股：{len(disposal_today)} 檔（上市+上櫃）")
         except Exception as e:
             print(f"FinLab disposal_information 失敗: {e}")
+
+        # ── Fallback：用 _disposal_history（TWSE/TPEX 爬蟲）補充 FinLab 漏掉的檔 ──
+        try:
+            hist_today = _disposal_history.get(today_str, {})
+            added = 0
+            for sid, info in hist_today.items():
+                sid = clean_stock_id(sid)
+                if not is_valid_stock(sid):
+                    continue
+                if sid in disposal_today:
+                    continue  # FinLab 已有，不覆蓋
+                # 嘗試解析 period 確認今天仍在處置中
+                raw_period = info.get("period", "")
+                parts = raw_period.replace("～", "~").split("~")
+                if len(parts) == 2:
+                    try:
+                        def _parse_ts(s):
+                            s = s.strip().replace("-", "/")
+                            p = s.split("/")
+                            y = int(p[0]) + 1911 if len(p[0]) == 3 else int(p[0])
+                            return pd.Timestamp(y, int(p[1]), int(p[2]))
+                        end_ts = _parse_ts(parts[1])
+                        if end_ts < pd.Timestamp(today.date()):
+                            continue  # 已出關
+                    except:
+                        pass
+                disposal_today[sid] = {"name": info.get("name", ""), "period": raw_period}
+                added += 1
+            if added:
+                print(f"  _disposal_history 補充 {added} 檔，合計 {len(disposal_today)} 檔")
+        except Exception as e:
+            print(f"  _disposal_history 補充失敗: {e}")
 
         def parse_period(period_str):
             """解析處置期間，支援民國年/西元年、/或-分隔，回傳 (start_ts, end_ts, period_ad)"""
@@ -832,8 +871,8 @@ def get_all_data():
                         print(f"  [{stock_id}] 不在 close_3m")
                     continue
                 prices = close_3m[stock_id].dropna()
-                if len(prices) < 20:
-                    print(f"  跳過 {stock_id}：資料不足20筆({len(prices)}筆)")
+                if len(prices) < 10:
+                    print(f"  跳過 {stock_id}：資料不足10筆({len(prices)}筆)")
                     continue
 
                 trading_days = prices.index[prices.index >= start_date]
@@ -848,8 +887,8 @@ def get_all_data():
                         print(f"  [7711debug] 處置前最後10筆最高價: {pre_debug.tail(10).to_dict()}")
                         print(f"  [7711debug] 前10日最高點: {pre_debug.tail(10).max()}")
 
-                ma10 = prices.rolling(10).mean()
-                ma20 = prices.rolling(20).mean()
+                ma10 = prices.rolling(10, min_periods=5).mean()
+                ma20 = prices.rolling(20, min_periods=10).mean()
                 hist_price = prices.iloc[-1]
                 current_ma10 = ma10.iloc[-1]
                 current_ma20 = ma20.iloc[-1]
